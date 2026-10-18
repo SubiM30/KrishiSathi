@@ -1,0 +1,37 @@
+{
+  "name": "KrishiSathi — Farmer's Companion AI",
+  "short_name": "KrishiSathi",
+  "description": "AI farming companion: crop disease diagnosis, mandi prices, weather alerts and sell advice for Indian farmers.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f1f6f2",
+  "theme_color": "#0f9d58",
+  "lang": "en-IN",
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

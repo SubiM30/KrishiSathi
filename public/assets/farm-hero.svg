@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 224" role="img" aria-label="Farm illustration">
+  <!-- KrishiSathi dashboard illustration.
+       Replace this file with a photo of the same name (or point the <img>
+       in views.js at your own image) — the layout adapts automatically. -->
+  <defs>
+    <linearGradient id="ksSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dff5e8"/><stop offset="1" stop-color="#f4fbf7"/>
+    </linearGradient>
+    <linearGradient id="ksFar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6edaa5"/><stop offset="1" stop-color="#34c384"/>
+    </linearGradient>
+    <linearGradient id="ksNear" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14a86a"/><stop offset="1" stop-color="#0a5e3b"/>
+    </linearGradient>
+    <radialGradient id="ksSun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffdd85"/><stop offset="1" stop-color="#fbb61f"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="300" height="224" rx="20" fill="url(#ksSky)"/>
+  <circle cx="232" cy="58" r="26" fill="url(#ksSun)" opacity="0.95"/>
+  <circle cx="232" cy="58" r="40" fill="#fbb61f" opacity="0.12"/>
+
+  <!-- distant hills -->
+  <path d="M0 138c34-26 62-26 92-4 30 22 58 22 92-6 26-22 60-24 116-6v102H0z" fill="url(#ksFar)" opacity="0.55"/>
+  <!-- near field -->
+  <path d="M0 168c46-20 84-18 120 2 40 22 78 20 122-4 20-10 40-12 58-8v66H0z" fill="url(#ksNear)"/>
+
+  <!-- crop rows -->
+  <g stroke="#eafbf2" stroke-width="2.4" stroke-linecap="round" opacity="0.5">
+    <path d="M18 200h60M40 208h58M74 216h56"/>
+  </g>
+
+  <!-- a sprout -->
+  <g transform="translate(96 132)">
+    <path d="M0 34V8" stroke="#0a5e3b" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M0 16C-16 16-22 6-22-6c14 0 22 8 22 22z" fill="#14a86a"/>
+    <path d="M0 16c16 0 22-10 22-22-14 0-22 8-22 22z" fill="#34c384"/>
+  </g>
+
+  <!-- little silo -->
+  <g transform="translate(196 118)">
+    <rect x="0" y="14" width="26" height="40" rx="4" fill="#0a5e3b" opacity="0.85"/>
+    <path d="M-3 14 13 0l16 14z" fill="#0b7648"/>
+    <rect x="6" y="26" width="14" height="28" rx="3" fill="#eafbf2" opacity="0.5"/>
+  </g>
+</svg>

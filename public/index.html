@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <!-- Apply the saved theme before first paint so there is no flash.
+       'system' follows the device's light/dark setting. -->
+  <script>
+    (function () {
+      try {
+        var pref = localStorage.getItem('ks_theme') || 'system';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      } catch (e) {}
+    })();
+  </script>
+  <title>KrishiSathi — Farmer's Companion AI</title>
+  <meta name="description" content="AI-powered farming companion: crop disease diagnosis, live mandi prices, weather alerts and sell advice for Indian farmers." />
+
+  <!-- ── PWA ───────────────────────────────────────────────── -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0f9d58" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="KrishiSathi" />
+
+  <!-- ── Fonts ───────────────────────────────────────────────
+       Plus Jakarta Sans — modern, friendly geometric UI face.
+       Mukta — an Indian foundry font with full Devanagari coverage,
+       used as the fallback for every Indic script in the interface. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Mukta:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- ── Icons: Lucide (https://lucide.dev), loaded from a CDN ──
+       icons.js reads window.lucide.icons and builds every glyph itself.
+       Deferred so it never blocks first paint, but still executes before
+       the app module below (defer scripts run in document order). -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <script defer src="https://unpkg.com/lucide@1.58.0/dist/umd/lucide.js"></script>
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#app">Skip to content</a>
+
+  <div class="app-shell">
+    <!-- ══════════ PRIMARY NAVIGATION ══════════
+         Rendered from the NAV config in js/app.js.
+         Bottom bar on phones/tablets → side rail on wide screens. -->
+    <nav class="tabbar" id="tabbar" aria-label="Main navigation"></nav>
+
+    <div class="app-body">
+      <!-- ══════════ TOP APP BAR ══════════ -->
+      <header class="appbar">
+        <div class="appbar-inner">
+          <a class="brand" href="#/" aria-label="KrishiSathi home">
+            <span class="brand-mark" id="brand-mark"></span>
+            <span class="brand-name">Krishi<span class="brand-accent">Sathi</span></span>
+          </a>
+
+          <div class="appbar-actions">
+            <button class="lang-pill" id="lang-btn" type="button" title="Language" aria-label="Language">
+              <span class="lang-pill-ic" id="lang-pill-ic" aria-hidden="true"></span>
+              <span class="lang-current" id="lang-current">English</span>
+            </button>
+            <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle dark mode"></button>
+            <div class="account" id="auth-area"></div>
+          </div>
+        </div>
+      </header>
+
+      <!-- ══════════ PAGE CONTENT ══════════ -->
+      <main class="app-main" id="app" tabindex="-1">
+        <div class="loading-block">Loading KrishiSathi…</div>
+      </main>
+
+      <!-- ══════════ FOOTER ══════════ -->
+      <footer class="site-footer">
+        <div class="footer-inner">
+          <div class="footer-brand">
+            <span class="brand-mark" id="footer-mark"></span>
+            <div>
+              <strong>KrishiSathi</strong>
+              <p class="small muted">
+                <span data-i18n="hero_kicker">Farmer's Companion AI</span> ·
+                <span data-i18n="footer_tagline">built on free and open services</span>
+              </p>
+            </div>
+          </div>
+          <p class="small muted footer-note" data-i18n="footer_note">AI advice is guidance, not a substitute for agricultural experts. Prices: AGMARKNET via data.gov.in · Weather: Open-Meteo. Always confirm at your local mandi.</p>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ══════════ "MORE" SHEET ══════════
+       Slides up from the bottom on phones, centres on wide screens.
+       Its contents are rendered from the MORE config in js/app.js. -->
+  <div class="sheet-backdrop hidden" id="sheet-backdrop"></div>
+  <section class="sheet hidden" id="more-sheet" role="dialog" aria-modal="true" aria-label="More options"></section>
+
+  <!-- ══════════ LOGIN / SIGN UP MODAL ══════════ -->
+  <div class="modal-backdrop hidden" id="login-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="icon-btn modal-close" id="login-close" aria-label="Close">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <span class="modal-kicker">KrishiSathi</span>
+      <h2 id="modal-title">Welcome back</h2>
+
+      <div class="modal-tabs" role="tablist">
+        <button class="tab active" id="tab-login" role="tab" aria-selected="true"><span data-i18n="common_login">Log in</span></button>
+        <button class="tab" id="tab-signup" role="tab" aria-selected="false"><span data-i18n="common_signup">Sign up</span></button>
+      </div>
+
+      <div id="login-error" class="form-error hidden"></div>
+
+      <form id="login-form" class="stack">
+        <label id="name-wrap" class="hidden"><span data-i18n="auth_name">Your name</span>
+          <input type="text" id="login-name" placeholder="e.g. Ramesh Patil" autocomplete="name" />
+        </label>
+        <label id="email-label"><span data-i18n="auth_email">Email</span>
+          <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" required />
+        </label>
+        <label><span id="password-label" data-i18n="auth_password">Password</span>
+          <input type="password" id="login-password" placeholder="At least 6 characters" minlength="6" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit">Log in</button>
+      </form>
+
+      <div class="divider"><span>or</span></div>
+
+      <button class="btn btn-outline btn-block" id="google-login">
+        <svg class="icon icon-google" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.9-.1-1.7-.2-2.5H12v4.7h6.5c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.2 0-5.8-2.1-6.8-5H1.2v3.1C3.2 21.5 7.3 24 12 24z"/><path fill="#FBBC05" d="M5.2 14.3c-.3-.7-.4-1.5-.4-2.3s.1-1.6.4-2.3V6.6H1.2C.4 8.2 0 10 0 12s.4 3.8 1.2 5.4l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8L20 3.1C18 1.2 15.2 0 12 0 7.3 0 3.2 2.5 1.2 6.6l4 3.1c1-2.9 3.6-4.9 6.8-4.9z"/></svg>
+        <span data-i18n="auth_google">Continue with Google</span>
+      </button>
+      <button class="btn btn-ghost btn-block" id="guest-login">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5"/></svg>
+        <span data-i18n="auth_guest">Continue as guest</span>
+      </button>
+
+      <p class="muted small center" id="modal-hint">Guests can explore everything — log in to save history.</p>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <noscript>
+    <div style="padding:2rem;text-align:center;font-family:sans-serif">
+      KrishiSathi needs JavaScript enabled to run. Please turn it on and reload.
+    </div>
+  </noscript>
+
+  <!-- App scripts (ES modules) -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

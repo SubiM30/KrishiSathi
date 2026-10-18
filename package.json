@@ -1,0 +1,19 @@
+{
+  "name": "krishisathi",
+  "version": "22.8.0",
+  "description": "KrishiSathi - Farmer's Companion AI. Multilingual AI-powered web platform for Indian farmers: crop disease diagnosis, mandi prices, weather alerts and sell advice.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "license": "MIT"
+}
