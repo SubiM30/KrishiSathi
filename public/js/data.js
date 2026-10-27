@@ -110,7 +110,7 @@ export const DEFAULT_CROP_DAYS = 120;
 export const CROP_STAGES = [
   { key: 'stage_sowing',     to: 0.10, icon: 'sprout' },
   { key: 'stage_vegetative', to: 0.45, icon: 'leaf' },
-  { key: 'stage_flowering',  to: 0.70, icon: 'sparkle' },
+  { key: 'stage_flowering',  to: 0.70, icon: 'flower' },
   { key: 'stage_maturity',   to: 0.90, icon: 'wheat' },
   { key: 'stage_harvest',    to: 1.01, icon: 'truck' },
 ];

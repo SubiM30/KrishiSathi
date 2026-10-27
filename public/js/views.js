@@ -9,16 +9,21 @@
  */
 import {
   sendChat, diagnosePhoto, getMandiPrices, getSellAdvice, getWeather, searchPlaces, summariseText,
+  uploadMarketPhoto,
 } from './api.js';
-import { saveDiagnosis, saveSellAnalysis, loadDiagnoses } from './auth.js';
+import { saveDiagnosis, saveSellAnalysis, loadDiagnoses, updateDisplayName } from './auth.js';
 import {
-  SCHEMES, STATES, COMMODITIES, CROP_STAGES, EXPENSE_CATEGORIES, AREA_UNITS,
+  SCHEMES, STATES, CROP_STAGES, EXPENSE_CATEGORIES, AREA_UNITS,
   cropStage, cropDays,
 } from './data.js';
 import { ICONS, weatherIcon } from './icons.js';
+import { CROPS, COMMON_CROPS } from './crops.js';
+import { renderCombobox, wireCombobox } from './combobox.js';
 import { t, getLang, getLangName, getSpeechLang, LANGS } from './i18n.js';
 import { openSheet, closeSheet } from './sheet.js';
+import { showAnimated, hideAnimated } from './motion.js';
 import * as store from './store.js';
+import * as market from './market.js';
 
 /* ── shared helpers ─────────────────────────────── */
 const esc = (s) => {
@@ -58,6 +63,16 @@ const shortDate = (v) => {
  * Cloudinary reliably — which is what puts the photo in the diagnosis history.
  * Photos already under the limit are returned untouched.
  */
+/** Read a picked File into a data URL. */
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function shrinkImage(dataUrl, maxBytes = 1024 * 1024) {
   return new Promise((resolve) => {
     try {
@@ -159,7 +174,7 @@ function seasonOf(d = new Date()) {
 function toast(msg, ms = 3400) {
   const el = document.getElementById('toast');
   if (!el) return;
-  el.textContent = msg;
+  el.innerHTML = `<span class="toast-ic">${ICONS.check}</span><span class="toast-text">${esc(msg)}</span>`;
   el.classList.remove('hidden');
   clearTimeout(el._timer);
   el._timer = setTimeout(() => el.classList.add('hidden'), ms);
@@ -585,11 +600,15 @@ function wireMic(btn, voice, onStart) {
 }
 
 /* ══════════ crop-cycle building blocks ══════════ */
+/* Each stage carries its own data-stage so the stylesheet can give it the
+   colour of that phase of the crop's life (see .cycle-stage in styles.css).
+   The bar takes the CURRENT stage's colour. Home and My Farm both render
+   through here, so the two stay identical. */
 function cycleHtml(st) {
-  return `<div class="cycle">
+  return `<div class="cycle" data-stage="${st.stageIndex}">
     <div class="cycle-bar"><span style="width:${Math.round(st.progress * 100)}%"></span></div>
     <div class="cycle-stages">
-      ${CROP_STAGES.map((s, i) => `<span class="cycle-stage${i === st.stageIndex ? ' active' : ''}${i < st.stageIndex ? ' done' : ''}">
+      ${CROP_STAGES.map((s, i) => `<span class="cycle-stage${i === st.stageIndex ? ' active' : ''}${i < st.stageIndex ? ' done' : ''}" data-stage="${i}">
         <i>${ICONS[s.icon]}</i><em><span class="st-long">${t(s.key)}</span><span class="st-short">${t('stage_short_' + s.key.replace('stage_', ''))}</span></em></span>`).join('')}
     </div>
   </div>`;
@@ -632,7 +651,7 @@ function cropCardHtml(crop) {
       <div class="crop-title">
         <div class="crop-name-row">
           <h3>${esc(crop.commodity)}${crop.variety ? ' · ' + esc(crop.variety) : ''}</h3>
-          <span class="badge badge-ok">${t(st.stage.key)}</span>
+          <span class="badge stage-badge" data-stage="${st.stageIndex}">${t(st.stage.key)}</span>
         </div>
         <p class="muted small">${cropSubHtml(crop)}</p>
       </div>
@@ -675,7 +694,7 @@ function cropManageCardHtml(crop) {
       <div class="crop-title">
         <div class="crop-name-row">
           <h3>${esc(crop.commodity)}${crop.variety ? ' · ' + esc(crop.variety) : ''}</h3>
-          <span class="badge badge-ok">${t(st.stage.key)}</span>
+          <span class="badge stage-badge" data-stage="${st.stageIndex}">${t(st.stage.key)}</span>
         </div>
         <p class="muted small">${cropSubHtml(crop)}${crop.expectedYield ? ' · ' + crop.expectedYield + ' q' : ''}</p>
       </div>
@@ -716,7 +735,7 @@ export function renderHome(user, guest) {
   const who = (p.name || (user && (user.displayName || user.email)) || '').split(' ')[0].split('@')[0];
   const wxPlace = [p.district, p.state].filter(Boolean).join(', ');
   const actions = [
-    ['doctor', 'leaf', t('nav_doctor'), '#/crop-doctor'],
+    ['market', 'handshake', t('nav_direct_selling'), '#/market'],
     ['ai', 'chat', t('nav_chat'), '#/chat'],
     ['weather', 'cloudSun', t('nav_weather'), '#/weather'],
     ['sell', 'scale', t('nav_sell'), '#/sell'],
@@ -734,6 +753,18 @@ export function renderHome(user, guest) {
         ${!p.state ? `<a class="btn btn-primary btn-sm" href="#/farm" style="margin-top:.5rem">${ICONS.plus} ${t('farm_profile')}</a>` : ''}
       </div>
       <img class="greet-art" src="assets/farm-hero.svg" alt="" width="150" height="112" />
+    </section>
+
+    <section class="voice-hero">
+      <button class="voice-hero-btn" type="button" data-voice-open aria-label="${esc(t('home_voice_title'))}">
+        <span class="voice-hero-orb">${ICONS.mic}</span>
+        <span class="voice-hero-copy">
+          <span class="voice-hero-kicker">${esc(t('home_voice_kicker'))}</span>
+          <strong>${esc(t('home_voice_title'))}</strong>
+          <span class="voice-hero-sub">${esc(t('home_voice_desc'))}</span>
+        </span>
+        <span class="voice-hero-go" aria-hidden="true">${ICONS.chevronRight}</span>
+      </button>
     </section>
 
     <h2 class="section-title">${ICONS.sprout} ${t('home_crop_cycle')}</h2>
@@ -1224,14 +1255,22 @@ function renderDiagnosisCard(d, imageUrl, stored) {
 export function renderMandi() {
   const farm = store.getFarm();
   const primary = (farm.crops || [])[0];
-  const commodityOptions = COMMODITIES.map((c) => `<option value="${esc(c)}"${primary && primary.commodity === c ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const commodityField = renderCombobox({
+    id: 'm-commodity',
+    items: CROPS,
+    common: COMMON_CROPS,
+    value: primary ? primary.commodity : '',
+    placeholder: t('crop_search_ph'),
+    noMatch: t('crop_no_match'),
+    moreHint: t('crop_more_hint'),
+  });
   const stateOptions = STATES.map((s) => `<option value="${esc(s)}"${farm.profile.state === s ? ' selected' : ''}>${esc(s)}</option>`).join('');
   return `
   <div class="page">
     <header class="page-header"><h1>${ICONS.store} ${t('nav_mandi')}</h1><p>${t('mandi_desc')}</p></header>
     <section class="card">
       <form class="form-row" id="mandi-form">
-        <label>${t('mandi_commodity')}*<select id="m-commodity" required><option value="">—</option>${commodityOptions}</select></label>
+        <label>${t('mandi_commodity')}*${commodityField}</label>
         <label>${t('mandi_state')}<select id="m-state"><option value="">All India</option>${stateOptions}</select></label>
         <label>${t('mandi_district')}<input type="text" id="m-district" placeholder="e.g. Kolkata" value="${esc(farm.profile.district || '')}" /></label>
         <div style="align-self:end"><button class="btn btn-primary" type="submit" style="width:100%">${ICONS.search} ${t('mandi_show')}</button></div>
@@ -1245,6 +1284,7 @@ export function wireMandi() {
   const form = document.getElementById('mandi-form');
   const result = document.getElementById('mandi-result');
   const commoditySel = document.getElementById('m-commodity');
+  wireCombobox('m-commodity');
   const stateSel = document.getElementById('m-state');
   const districtInput = document.getElementById('m-district');
   const VIEW_KEY = 'ks_mandi_view';
@@ -1750,7 +1790,14 @@ export function renderFarm() {
   const p = farm.profile;
   const crops = farm.crops || [];
   const stateOptions = STATES.map((s) => `<option value="${esc(s)}" ${p.state === s ? 'selected' : ''}>${esc(s)}</option>`).join('');
-  const commodityOptions = COMMODITIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const commodityField = renderCombobox({
+    id: 'cf-commodity',
+    items: CROPS,
+    common: COMMON_CROPS,
+    placeholder: t('crop_search_ph'),
+    noMatch: t('crop_no_match'),
+    moreHint: t('crop_more_hint'),
+  });
   return `
   <div class="page">
     <header class="page-header"><h1>${ICONS.sprout} ${t('farm_title')}</h1><p>${t('farm_desc')}</p></header>
@@ -1759,7 +1806,7 @@ export function renderFarm() {
       <h2>${ICONS.user} ${t('farm_profile')}</h2>
       <form class="stack" id="farm-profile-form">
         <div class="form-row">
-          <label>${t('profile_name')}<input id="fp-name" value="${esc(p.name || '')}" placeholder="e.g. Ramesh Patil" /></label>
+          <label>${t('profile_name')}<input id="fp-name" value="${esc(p.name || '')}" placeholder="e.g. Ramesh Kumar" /></label>
           <label>${t('mandi_state')}<select id="fp-state"><option value="">—</option>${stateOptions}</select></label>
         </div>
         <div class="form-row">
@@ -1793,7 +1840,7 @@ export function renderFarm() {
         <form class="stack" id="crop-form">
           <input type="hidden" id="cf-id" />
           <div class="form-row">
-            <label>${t('crop_commodity')}*<select id="cf-commodity" required><option value="">—</option>${commodityOptions}</select></label>
+            <label>${t('crop_commodity')}*${commodityField}</label>
             <label>${t('crop_variety')}<input id="cf-variety" placeholder="e.g. N-53" /></label>
           </div>
           <div class="form-row">
@@ -1823,15 +1870,20 @@ export function wireFarm(user) {
 
   document.getElementById('farm-profile-form').addEventListener('submit', (e) => {
     e.preventDefault();
+    const name = document.getElementById('fp-name').value.trim();
     store.setProfile({
-      name: document.getElementById('fp-name').value.trim(),
+      name,
       state: document.getElementById('fp-state').value,
       district: document.getElementById('fp-district').value.trim(),
     });
+    // Keep the account's display name in step with the profile name, so the
+    // avatar, the account menu and the greeting all agree — farmer or buyer.
+    updateDisplayName(name).catch(() => {});
     toast(t('profile_saved'));
   });
 
   const cfCommodity = document.getElementById('cf-commodity');
+  wireCombobox('cf-commodity');
   const cfSowing = document.getElementById('cf-sowing');
   const cfHarvest = document.getElementById('cf-harvest');
   initDateField('cf-sowing');
@@ -1937,6 +1989,15 @@ export function renderSettings(user) {
     </section>
 
     <section class="card">
+      <h2>${ICONS.handshake} ${t('settings_role')}</h2>
+      <p class="muted small">${t('settings_role_desc')}</p>
+      <div class="btn-row" style="margin-top:.8rem">
+        <button class="btn ${store.getRole() === 'farmer' ? 'btn-primary' : 'btn-outline'}" id="settings-role-farmer" type="button">${ICONS.sprout} ${t('mk_role_seller')}</button>
+        <button class="btn ${store.getRole() === 'buyer' ? 'btn-primary' : 'btn-outline'}" id="settings-role-buyer" type="button">${ICONS.store} ${t('mk_role_buyer')}</button>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>${ICONS.sliders} ${t('settings_prefs')}</h2>
       <ul class="settings-list">
         <li class="settings-row">
@@ -1984,6 +2045,16 @@ export function wireSettings(user) {
   });
 
   document.getElementById('settings-lang').addEventListener('click', () => document.getElementById('lang-btn').click());
+
+  // The role is the account's, so it can be corrected here if it was ever set
+  // wrongly — nothing else is allowed to change it behind your back.
+  const pickRole = (role) => {
+    store.setRole(role);
+    toast(t(role === 'buyer' ? 'settings_role_buyer' : 'settings_role_farmer'));
+    renderSettings(user);
+  };
+  document.getElementById('settings-role-farmer')?.addEventListener('click', () => pickRole('farmer'));
+  document.getElementById('settings-role-buyer')?.addEventListener('click', () => pickRole('buyer'));
 
   // Light / System / Dark
   document.querySelectorAll('[data-theme-pref]').forEach((b) =>
@@ -2198,4 +2269,798 @@ export function wireChat(user) {
   try { seed = sessionStorage.getItem('ks_chat_seed'); if (seed) sessionStorage.removeItem('ks_chat_seed'); } catch {}
   if (seed) ask(seed);
   input.focus();
+}
+
+/* ══════════ VOICE ASK — home mic → full-width pop-up → Ask AI ══════════
+   One overlay for the whole app, wired once at boot. It listens exactly the
+   way the Ask AI mic does; once a question has been heard it is handed to
+   Ask AI as the chat seed, the Ask AI page opens, and the answer appears
+   there as usual. */
+let voiceAskReady = false;
+export function initVoiceAsk() {
+  if (voiceAskReady) return;
+  voiceAskReady = true;
+  const overlay = document.getElementById('voice-overlay');
+  if (!overlay) return;
+  const micBtn = document.getElementById('voice-mic');
+  const statusEl = document.getElementById('voice-status');
+  const textEl = document.getElementById('voice-text');
+  const sendBtn = document.getElementById('voice-send');
+  let manualStop = false; // the user tapped the mic to stop — let them review
+
+  // The "Ask AI" button only means something once there is a question to send.
+  const syncSend = () => { sendBtn.disabled = !textEl.textContent.trim(); };
+  const setText = (text) => { textEl.textContent = text || ''; syncSend(); };
+
+  const voice = createVoiceCapture({
+    onText: (text) => {
+      setText(text);
+      // A silence auto-stop sends straight away (that is the point). A manual
+      // stop leaves the words in the box so they can be corrected first.
+      if (manualStop) { manualStop = false; return; }
+      goToChat(text);
+    },
+    onInterim: (text) => setText(text),
+    onState: (on) => {
+      micBtn.classList.toggle('listening', on);
+      overlay.classList.toggle('is-listening', on);
+      statusEl.textContent = on ? t('listening') : t('tap_mic');
+      if (on) manualStop = false;
+    },
+  });
+
+  function open() {
+    manualStop = false;
+    textEl.setAttribute('data-placeholder', t('voice_placeholder'));
+    setText('');
+    statusEl.textContent = t('listening');
+    showAnimated(overlay);
+    document.body.classList.add('no-scroll');
+    // let the pop-up finish its entrance before the mic opens
+    setTimeout(() => voice.start({}), 280);
+  }
+  function close() {
+    voice.stop();
+    document.body.classList.remove('no-scroll');
+    hideAnimated(overlay, 320);
+  }
+  function goToChat(text) {
+    const q = (text || '').trim();
+    voice.stop();
+    // Nothing said (or only the placeholder showing) → send nothing at all.
+    if (!q) return;
+    document.body.classList.remove('no-scroll');
+    hideAnimated(overlay, 200);
+    try { sessionStorage.setItem('ks_chat_seed', q); } catch {}
+    if (location.hash === '#/chat') window.dispatchEvent(new Event('hashchange'));
+    else location.hash = '#/chat';
+  }
+
+  micBtn.addEventListener('click', () => {
+    // Tapping the mic while it listens stops it and keeps the words for review;
+    // tapping again continues listening from whatever is already in the box.
+    if (voice.isListening()) { manualStop = true; voice.stop(); }
+    else voice.start({ baseText: textEl.textContent.trim() });
+  });
+  document.getElementById('voice-close').addEventListener('click', close);
+  document.getElementById('voice-cancel').addEventListener('click', close);
+  sendBtn.addEventListener('click', () => goToChat(textEl.textContent));
+  textEl.addEventListener('input', syncSend);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) close();
+  });
+
+  // The home card opens it — delegated, so it survives every home re-render.
+  document.addEventListener('click', (e) => {
+    const trigger = e.target.closest('[data-voice-open]');
+    if (trigger) { e.preventDefault(); open(); }
+  });
+
+  syncSend();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MARKETPLACE — a two-sided board.
+   A farmer posts "Want to Sell", a buyer posts "Want to Buy". Both are
+   public; only the author can manage their own. One account = one role,
+   and the role decides which kind of listing you can create.
+   ════════════════════════════════════════════════════════════════ */
+const telHref = (phone) => `tel:${String(phone).replace(/[^\d+]/g, '')}`;
+const waHref = (phone, text) =>
+  `https://wa.me/${String(phone).replace(/[^\d]/g, '')}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+
+const typeLabel = (type) => (type === 'sell' ? t('mk_want_sell') : t('mk_want_buy'));
+const typeIcon = (type) => (type === 'sell' ? ICONS.sprout : ICONS.store);
+/** The action a viewer takes on someone else's listing. */
+const actLabel = (type) => (type === 'sell' ? t('mk_buy') : t('mk_sell'));
+const actIcon = (type) => (type === 'sell' ? ICONS.handshake : ICONS.scale);
+
+const marketView = { tab: 'all', q: '' };
+const MARKET_TABS = ['all', 'sell', 'buy', 'mine', 'interests'];
+
+function daysLabel(post) {
+  if (market.isExpired(post)) return { text: t('mk_expired'), soon: true };
+  const d = market.daysLeft(post);
+  return { text: `${d} ${d === 1 ? t('mk_day') : t('mk_days')}`, soon: d <= 3 };
+}
+
+/** Is this listing mine? True on every tab, so I never get Buy/Sell on my own. */
+function isMyPost(post, user) {
+  if (!post) return false;
+  const uid = user && user.uid;
+  return uid ? post.authorId === uid : !post.authorId;
+}
+
+function marketCard(post, { user } = {}) {
+  const mine = isMyPost(post, user);
+  const dl = daysLabel(post);
+  const contact = `
+    <a class="btn btn-primary" href="${esc(telHref(post.phone))}">${ICONS.phone} ${esc(t('mk_call'))}</a>
+    <a class="btn btn-outline" href="${esc(waHref(post.phone))}" target="_blank" rel="noopener">${ICONS.chat} ${esc(t('mk_whatsapp'))}</a>`;
+  const actions = mine
+    ? `<button class="btn mk-act mk-act-edit" data-mk-edit="${esc(post.id)}">${ICONS.pencil} ${esc(t('mk_edit'))}</button>
+       <button class="btn mk-act mk-act-extend" data-mk-extend="${esc(post.id)}">${ICONS.refresh} ${esc(t('mk_extend'))}</button>
+       <button class="btn mk-act mk-act-close" data-mk-close="${esc(post.id)}">${esc(t('mk_close'))}</button>
+       <button class="btn mk-act mk-act-delete" data-mk-delete="${esc(post.id)}">${ICONS.trash} ${esc(t('mk_delete'))}</button>`
+    : (market.hasResponded(post.id, user && user.uid)
+        ? `<button class="btn act-sent" data-mk-sent="${esc(post.id)}">${ICONS.check} ${esc(t('mk_sent'))}</button>${contact}`
+        : `<button class="btn btn-amber" data-mk-respond="${esc(post.id)}">${actIcon(post.type)} ${esc(actLabel(post.type))}</button>${contact}`);
+  return `
+  <section class="card mk-card mk-card-tap" data-mk-card="${esc(post.id)}" data-mk-open="${esc(post.id)}" role="button" tabindex="0">
+    ${post.image ? `<img class="mk-photo" src="${esc(post.image)}" alt="${esc(post.commodity)}" loading="lazy" />` : ''}
+    <div class="mk-top">
+      <span class="mk-type ${post.type === 'sell' ? 'mk-type-sell' : 'mk-type-buy'}">${typeIcon(post.type)} ${esc(typeLabel(post.type))}</span>
+      <span class="mk-topright">
+        ${post.createdAt ? `<span class="mk-date">${esc(postDateLabel(post.createdAt))}</span>` : ''}
+        <span class="mk-expiry ${dl.soon ? 'is-soon' : ''}">${esc(dl.text)}</span>
+      </span>
+    </div>
+    <div class="mk-crop">${esc(post.commodity)}</div>
+    <div class="mk-facts">
+      <span><b>${esc(post.quantity)}</b> ${esc(post.unit)}</span>
+      ${post.price ? `<span><b>${esc(post.price)}</b></span>` : ''}
+    </div>
+    ${post.place ? `<div class="mk-where">${ICONS.pin} ${esc(post.place)}</div>` : ''}
+    <div class="mk-actions">${actions}</div>
+  </section>`;
+}
+
+function marketBody(user) {
+  const isSeller = Boolean(user && user.uid) && store.getRole() !== 'buyer';
+  const feedType = isSeller ? 'buy' : 'sell'; // a farmer watches buyer posts
+  const tab = MARKET_TABS.includes(marketView.tab) ? marketView.tab : 'all';
+  const chip = (id, label) =>
+    `<button class="mk-chip ${tab === id ? 'is-on' : ''}" data-mk-tab="${id}">${esc(label)}</button>`;
+  return `
+    <div class="mk-filters">
+      ${chip('all', t('mk_filter_all'))}${chip('sell', t('mk_filter_sale'))}${chip('buy', t('mk_filter_wanted'))}${chip('mine', t('mk_my_listings'))}
+    </div>
+    <div class="mk-search">${ICONS.search}<input type="search" id="mk-q" value="${esc(marketView.q || '')}" placeholder="${esc(t('mk_search_ph'))}" /></div>
+    ${marketList(user)}
+    `;
+}
+
+/** One interest, seen from my side: the listing I responded to. */
+function interestCard(it) {
+  const accepted = it.status === 'accepted';
+  return `
+  <section class="card mk-card">
+    <div class="mk-top">
+      <span class="mk-type ${it.postType === 'sell' ? 'mk-type-sell' : 'mk-type-buy'}">${it.postType === 'sell' ? ICONS.sprout : ICONS.store} ${esc(it.postType === 'sell' ? t('mk_want_sell') : t('mk_want_buy'))}</span>
+      <span class="mk-expiry ${accepted ? '' : 'is-soon'}">${esc(accepted ? t('mk_accepted') : t('mk_awaiting'))}</span>
+    </div>
+    <div class="mk-crop">${esc(it.postCommodity)}</div>
+    ${it.postPlace ? `<div class="mk-where">${ICONS.pin} ${esc(it.postPlace)}</div>` : ''}
+    <div class="mk-actions">
+      <button class="btn mk-act mk-act-edit" data-mk-open="${esc(it.postId)}">${esc(t('mk_view_listing'))}</button>
+    </div>
+  </section>`;
+}
+
+/** Just the listings — the piece the search replaces as you type. */
+function marketList(user) {
+  const isSeller = Boolean(user && user.uid) && store.getRole() !== 'buyer';
+  const q = (marketView.q || '').trim().toLowerCase();
+  const tab = MARKET_TABS.includes(marketView.tab) ? marketView.tab : 'all';
+  if (tab === 'interests') {
+    const mine = market.myInterests(user && user.uid);
+    return `<div class="mk-list" id="mk-list">
+      ${mine.length ? mine.map(interestCard).join('') : `<div class="card mk-empty">${esc(t('mk_none_interests'))}</div>`}
+    </div>`;
+  }
+  const all = market.getPosts();
+  let list;
+  if (tab === 'mine') list = market.myPosts(user && user.uid);
+  else if (tab === 'sell') list = all.filter((p) => p.type === 'sell' && !market.isExpired(p));
+  else if (tab === 'buy') list = all.filter((p) => p.type === 'buy' && !market.isExpired(p));
+  else list = all.filter((p) => !market.isExpired(p));
+  if (q) list = list.filter((p) => (p.commodity || '').toLowerCase().includes(q));
+  const emptyMsg = tab === 'mine' ? t('mk_none_mine') : q ? t('mk_none_search') : t('mk_none_feed');
+  return `<div class="mk-list" id="mk-list">
+      ${list.length ? list.map((p) => marketCard(p, { user })).join('') : `<div class="card mk-empty">${esc(emptyMsg)}</div>`}
+    </div>`;
+}
+
+/** A standing notice for the author: people have responded to your listings. */
+function notificationCard(user) {
+  const list = market.interestsForOwner(user && user.uid);
+  if (!list.length) return '';
+  const unseen = list.filter((i) => !i.seen).length;
+  return `
+    <button class="card mk-notif" id="mk-notif" type="button">
+      <span class="mk-notif-ic">${ICONS.bell || ICONS.chat}</span>
+      <span class="mk-notif-txt">
+        <b>${esc(t('mk_notif_title'))}</b>
+        <span>${esc(t('mk_notif_sub'))}</span>
+      </span>
+      ${unseen ? `<span class="mk-notif-count">${unseen}</span>` : ''}
+      <span class="mk-notif-arrow">${ICONS.chevronRight}</span>
+    </button>`;
+}
+
+/** The bell for the top bar — only there when something has happened. */
+export function bellButton(user) {
+  if (!(user && user.uid)) return '';
+  const incoming = market.interestsForOwner(user.uid);
+  const outgoing = market.myInterests(user.uid);
+  if (!incoming.length && !outgoing.length) return '';
+  // responses waiting for me + the outcomes of the ones I sent
+  const unseen = incoming.filter((i) => !i.seen).length
+    + market.unseenForResponder(user.uid).length;
+  return `<button class="icon-btn notif-bell" id="notif-bell" type="button" aria-label="${esc(t('mk_notif_title'))}">
+    ${ICONS.bell}${unseen ? `<span class="notif-dot">${unseen > 9 ? '9+' : unseen}</span>` : ''}
+  </button>`;
+}
+
+/** Today / Yesterday / 21 Oct, 2026 — the short form a feed uses. */
+function postDateLabel(ms) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  const today = new Date();
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const yest = new Date(today.getTime() - 86400000);
+  if (sameDay(d, today)) return t('today');
+  if (sameDay(d, yest)) return t('common_yesterday');
+  try {
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return d.toDateString();
+  }
+}
+
+/** Accepted / Rejected / Awaiting reply, in one place. */
+function statusText(st) {
+  if (st === 'accepted') return t('mk_accepted');
+  if (st === 'rejected') return t('mk_rejected');
+  return t('mk_awaiting');
+}
+
+/** The listings I have responded to. */
+function myResponses(user) {
+  return market.myInterests(user && user.uid);
+}
+
+export function renderMarket(user) {
+  const signedIn = Boolean(user && user.uid);
+  const isSeller = signedIn && store.getRole() !== 'buyer';
+  const who = signedIn ? (isSeller ? t('mk_role_seller') : t('mk_role_buyer')) : t('mk_role_visitor');
+  const heading = isSeller ? t('mk_title_seller') : t('mk_title_buyer');
+  const desc = isSeller ? t('mk_desc_seller') : t('mk_desc_buyer');
+  const title = !signedIn
+    ? (isSeller ? t('mk_login_title_sell') : t('mk_login_title'))
+    : isSeller ? t('mk_have_sell') : t('mk_have_buy');
+  const hint = !signedIn
+    ? (isSeller ? t('mk_login_hint_sell') : t('mk_login_hint'))
+    : isSeller ? t('mk_post_hint_seller') : t('mk_post_hint_buyer');
+  const action = !signedIn
+    ? `<button class="mk-post-btn" id="mk-new" data-role="login">${esc(isSeller ? t('mk_login_seller') : t('mk_login_buyer'))}</button>`
+    : `<button class="mk-post-btn" id="mk-new">${ICONS.plus} ${esc(t('mk_post'))}</button>`;
+  return `
+  <div class="page page-market ${isSeller ? 'mk-seller' : 'mk-buyer'}">
+    <div class="mk-toprow">
+      <span class="mk-role ${isSeller ? 'mk-role-seller' : 'mk-role-buyer'}">${isSeller ? ICONS.sprout : ICONS.store} ${esc(who)}</span>
+      ${signedIn ? `<button class="icon-btn mk-histbtn" id="mk-history" type="button" title="${esc(t('mk_history'))}" aria-label="${esc(t('mk_history'))}">${ICONS.historyClock}</button>` : ''}
+    </div>
+    <header class="page-header">
+      <div class="mk-headrow">
+        <h1>${esc(heading)}</h1>
+        ${signedIn ? `<button class="btn btn-outline btn-sm mk-myreq" id="mk-my-requests" type="button" title="${esc(t('mk_my_requests'))}">${esc(t('mk_my_requests'))}${myResponses(user).length ? ` <b>${myResponses(user).length}</b>` : ''}</button>` : ''}
+      </div>
+      <p>${esc(desc)}</p>
+    </header>
+    <section class="card mk-post${signedIn ? '' : ' mk-post--login'}">
+      <span class="mk-post-ic">${isSeller ? ICONS.sprout : ICONS.store}</span>
+      <div class="mk-post-txt"><b>${esc(title)}</b><span>${esc(hint)}</span></div>
+      ${action}
+    </section>
+    ${signedIn ? notificationCard(user) : ''}
+    <div id="mk-body">${marketBody(user)}</div>
+    ${isSeller ? '' : `<a class="mk-home" href="#/" aria-label="${esc(t('nav_home'))}">${ICONS.home}</a>`}
+  </div>`;
+}
+
+export function wireMarket(user) {
+  const signedIn = Boolean(user && user.uid);
+  const isSeller = signedIn && store.getRole() !== 'buyer';
+  const rerender = () => {
+    const body = document.getElementById('mk-body');
+    if (body) body.innerHTML = marketBody(user);
+    // the bell and the in-page notice live outside this element, so tell the
+    // app to repaint the top bar too — otherwise the count goes stale
+    window.dispatchEvent(new CustomEvent('ks:refresh-chrome'));
+  };
+  /**
+   * Typing in the search must NOT rebuild the whole body: that recreates the
+   * input, which drops the caret back to position 0 — so every new letter gets
+   * inserted at the front and "ABCDEFGH" arrives as "HGFEDCBA". Only the list
+   * is replaced; the field itself is left alone.
+   */
+  const rerenderList = () => {
+    const list = document.getElementById('mk-list');
+    if (list) list.outerHTML = marketList(user);
+  };
+  document.getElementById('mk-notif')?.addEventListener('click', () => openInterestsSheet(user));
+  // "My Requests" lives in the page header, outside the list, so it gets its
+  // own listener rather than the delegated one
+  document.getElementById('mk-history')?.addEventListener('click', () => {
+    if (!(user && user.uid)) {
+      document.dispatchEvent(new CustomEvent('ks:login', { detail: { role: 'buyer' } }));
+      return;
+    }
+    openHistorySheet(user);
+  });
+  document.getElementById('mk-my-requests')?.addEventListener('click', () => {
+    if (!(user && user.uid)) {
+      document.dispatchEvent(new CustomEvent('ks:login', { detail: { role: 'buyer' } }));
+      return;
+    }
+    openMyRequestsSheet(user);
+  });
+  document.getElementById('mk-new')?.addEventListener('click', () => {
+    // A listing needs an account behind it — the other side has to be able to
+    // reach you. From here the visitor is a buyer, so record that role before
+    // handing over to the login modal.
+    if (!signedIn) {
+      // Signed out, this page IS the buyer's page, so the button says "Login as
+      // buyer" — the modal must say the same. It used to read the stored farm's
+      // role (a farmer by default), so the buyer button opened the FARMER
+      // login. That was the switch.
+      document.dispatchEvent(new CustomEvent('ks:login', { detail: { role: 'buyer' } }));
+      return;
+    }
+    openPostSheet(user, null);
+  });
+  const body = document.getElementById('mk-body');
+  body?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-mk-tab]');
+    if (chip) { marketView.tab = chip.dataset.mkTab; rerender(); return; }
+    const ex = e.target.closest('[data-mk-extend]');
+    if (ex) { market.extendPost(ex.dataset.mkExtend, 3); toast(t('mk_extended')); return; }
+    const cl = e.target.closest('[data-mk-close]');
+    if (cl) { market.closePost(cl.dataset.mkClose); toast(t('mk_closed')); return; }
+    const del = e.target.closest('[data-mk-delete]');
+    if (del) { market.removePost(del.dataset.mkDelete); toast(t('mk_deleted')); return; }
+    const ed = e.target.closest('[data-mk-edit]');
+    if (ed) { openPostForm(user, market.getPost(ed.dataset.mkEdit)); return; }
+    const sent = e.target.closest('[data-mk-sent]');
+    if (sent) { toast(t('mk_already_sent')); return; }
+    const resp = e.target.closest('[data-mk-respond]');
+    if (resp) { respondToPost(user, market.getPost(resp.dataset.mkRespond)); return; }
+    // the whole card opens the listing — but a tap on one of its buttons or
+    // links must do only what that button says
+    const openEl = e.target.closest('[data-mk-open]');
+    if (!openEl) return;
+    if (e.target.closest('.mk-actions') || e.target.closest('a') || e.target.closest('button')) return;
+    openPostSheet(user, market.getPost(openEl.dataset.mkOpen));
+  });
+  body?.addEventListener('input', (e) => {
+    if (e.target.id === 'mk-q') { marketView.q = e.target.value; rerenderList(); }
+  });
+  market.subscribe(rerender);
+}
+
+/**
+ * Tell the author of a listing that I want to deal. The author is the one who
+ * gets the notification; I get a toast confirming it went out.
+ */
+async function respondToPost(user, post) {
+  if (!post) return;
+  if (!(user && user.uid)) {
+    document.dispatchEvent(new CustomEvent('ks:login', { detail: { role: 'buyer' } }));
+    return;
+  }
+  const prof = (store.getFarm().profile) || {};
+  await market.addInterest(post, {
+    id: user.uid,
+    role: store.getRole(),
+    name: prof.name || (user.email ? String(user.email).split('@')[0] : ''),
+    phone: '',
+  });
+  toast(post.type === 'sell' ? t('mk_notified_seller') : t('mk_notified_buyer'));
+  const body = document.getElementById('mk-body');
+  if (body) body.innerHTML = marketBody(user);
+}
+
+/** The author's list of everyone who has responded. */
+export function openInterestsSheet(user) {
+  const uid = user && user.uid;
+  const incoming = market.interestsForOwner(uid);
+  const outgoing = market.myInterests(uid);
+  market.markInterestsSeen(uid);
+  // the bell lives in the top bar, so it has to be told to repaint
+  window.dispatchEvent(new CustomEvent('ks:refresh-chrome'));
+
+  const status = (i) => `<span class="mk-expiry ${i.status === 'new' ? 'is-soon' : i.status === 'rejected' ? 'is-no' : ''}">${esc(statusText(i.status))}</span>`;
+  const cropPill = (i) =>
+    `<span class="mk-type ${i.postType === 'sell' ? 'mk-type-sell' : 'mk-type-buy'}">${typeIcon(i.postType)} ${esc(i.postCommodity)}</span>`;
+  const facts = (i) => [`${i.postQuantity || ''} ${i.postUnit || ''}`.trim(), i.postPrice].filter(Boolean).join('  ·  ');
+
+  // Someone responded to a listing of mine — a PERSON first, and their name is
+  // the headline. Tapping it opens the listing they responded to.
+  // On a response that is still waiting, the cross is a decision — it means
+  // "no", and the person who responded is told. On anything else it only
+  // clears the card from the list.
+  const cross = (i) => (i.status === 'new'
+    ? `<button type="button" class="resp-x resp-x-reject" data-reject="${esc(i.id)}" data-stop aria-label="${esc(t('mk_reject'))}" title="${esc(t('mk_reject'))}">${ICONS.close}</button>`
+    : `<button type="button" class="resp-x" data-dismiss="${esc(i.id)}" data-stop aria-label="${esc(t('common_remove'))}">${ICONS.close}</button>`);
+  const inCard = (i) => `
+    <section class="card mk-card resp-card resp-in" data-mk-open="${esc(i.postId)}" role="button" tabindex="0">
+      ${cross(i)}
+      <div class="mk-top">${cropPill(i)}${status(i)}</div>
+      <div class="mk-crop">${esc(i.fromName || t('mk_someone'))}</div>
+      <div class="mk-where">${ICONS.user} ${esc(i.fromRole === 'buyer' ? t('mk_role_buyer') : t('mk_role_seller'))}</div>
+      <div class="mk-actions">
+        ${i.fromPhone ? `<a class="btn btn-primary" href="${esc(telHref(i.fromPhone))}" data-stop>${ICONS.phone} ${esc(t('mk_call'))}</a>
+        <a class="btn btn-outline" href="${esc(waHref(i.fromPhone))}" target="_blank" rel="noopener" data-stop>${ICONS.chat} ${esc(t('mk_whatsapp'))}</a>` : ''}
+        ${i.status === 'accepted' ? '' : `<button class="btn mk-act mk-act-extend" data-mk-accept="${esc(i.id)}" data-stop>${ICONS.check} ${esc(t('mk_accept'))}</button>`}
+      </div>
+    </section>`;
+
+  // A listing I responded to — the LISTING first, so the two sections cannot be
+  // mistaken for each other.
+  const outCard = (i) => `
+    <section class="card mk-card resp-card resp-out" data-mk-open="${esc(i.postId)}" role="button" tabindex="0">
+      ${cross(i)}
+      <div class="mk-top">${cropPill(i)}${status(i)}</div>
+      <div class="mk-crop">${esc(i.postCommodity)}</div>
+      ${facts(i) ? `<div class="mk-facts"><span><b>${esc(facts(i))}</b></span></div>` : ''}
+      ${i.postPlace ? `<div class="mk-where">${ICONS.pin} ${esc(i.postPlace)}</div>` : ''}
+      <div class="mk-actions">
+        <span class="btn btn-outline">${esc(t('mk_view_listing'))}</span>
+      </div>
+    </section>`;
+
+  const host = openSheet(`
+    <div class="mk-sheet-head sheet-roomy sheet-wide">
+      <h2 class="sheet-title" style="margin:0">${esc(t('mk_responses'))}</h2>
+      ${(incoming.length || outgoing.length) ? `<button type="button" class="btn btn-outline btn-sm" id="resp-clear">${ICONS.trash} ${esc(t('mk_clear_notifications'))}</button>` : ''}
+      <button type="button" class="icon-btn" data-sheet-close aria-label="${esc(t('mk_cancel'))}">${ICONS.close}</button>
+    </div>
+    <div class="resp-wrap">
+      <div class="resp-section resp-section-in">${esc(t('mk_notif_title'))}${incoming.length ? ` <b>${incoming.length}</b>` : ''}</div>
+      <div class="mk-list">
+        ${incoming.length ? incoming.map(inCard).join('') : `<div class="card mk-empty">${esc(t('mk_no_notifs'))}</div>`}
+      </div>
+      <div class="resp-section resp-section-out">${esc(t('mk_your_responses'))}${outgoing.length ? ` <b>${outgoing.length}</b>` : ''}</div>
+      <div class="mk-list">
+        ${outgoing.length ? outgoing.map(outCard).join('') : `<div class="card mk-empty">${esc(t('mk_none_responses'))}</div>`}
+      </div>
+    </div>
+  `);
+  if (!host) return;
+  document.getElementById('resp-clear')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    market.clearInterests(uid);
+    toast(t('mk_notifications_cleared'));
+    closeSheet();
+  });
+  host.querySelectorAll('[data-reject]').forEach((b) =>
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      market.rejectInterest(b.dataset.reject);
+      toast(t('mk_rejected'));
+      openInterestsSheet(user);
+    }));
+  host.querySelectorAll('[data-dismiss]').forEach((b) =>
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      market.dismissInterest(b.dataset.dismiss);
+      openInterestsSheet(user);   // redraw without it
+    }));
+
+  // Accepting must not also open the listing underneath it.
+  host.querySelectorAll('[data-mk-accept]').forEach((b) =>
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      market.acceptInterest(b.dataset.mkAccept);
+      toast(t('mk_interest_accepted'));
+      openInterestsSheet(user);
+    }));
+  // …and a tap anywhere else on a card opens the listing it is about.
+  host.querySelectorAll('.resp-card[data-mk-open]').forEach((card) =>
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-stop]')) return;
+      const post = market.getPost(card.dataset.mkOpen);
+      if (!post) return;
+      closeSheet();
+      setTimeout(() => openPostSheet(user, post), 220);
+    }));
+}
+
+/** Just my own responses — the half of the notification sheet that belongs on
+ *  the market page, behind the "My Requests" button. */
+export function openMyRequestsSheet(user) {
+  const uid = user && user.uid;
+  const mine = market.myInterests(uid);
+  market.markInterestsSeen(uid);
+  window.dispatchEvent(new CustomEvent('ks:refresh-chrome'));
+  const status = (i) => `<span class="mk-expiry ${i.status === 'new' ? 'is-soon' : i.status === 'rejected' ? 'is-no' : ''}">${esc(statusText(i.status))}</span>`;
+  const facts = (i) => [`${i.postQuantity || ''} ${i.postUnit || ''}`.trim(), i.postPrice].filter(Boolean).join('  ·  ');
+  const host = openSheet(`
+    <div class="mk-sheet-head sheet-roomy sheet-wide">
+      <h2 class="sheet-title" style="margin:0">${esc(t('mk_my_requests'))}</h2>
+      <button type="button" class="icon-btn" data-sheet-close aria-label="${esc(t('mk_cancel'))}">${ICONS.close}</button>
+    </div>
+    <div class="resp-wrap">
+      <div class="mk-list">
+        ${mine.length ? mine.map((i) => `
+          <section class="card mk-card resp-card resp-out" data-mk-open="${esc(i.postId)}" role="button" tabindex="0">
+            <button type="button" class="resp-x" data-dismiss="${esc(i.id)}" data-stop aria-label="${esc(t('common_remove'))}">${ICONS.close}</button>
+            <div class="mk-top">
+              <span class="mk-type ${i.postType === 'sell' ? 'mk-type-sell' : 'mk-type-buy'}">${typeIcon(i.postType)} ${esc(i.postCommodity)}</span>
+              ${status(i)}
+            </div>
+            <div class="mk-crop">${esc(i.postCommodity)}</div>
+            ${facts(i) ? `<div class="mk-facts"><span><b>${esc(facts(i))}</b></span></div>` : ''}
+            ${i.postPlace ? `<div class="mk-where">${ICONS.pin} ${esc(i.postPlace)}</div>` : ''}
+            <div class="mk-actions"><span class="btn btn-outline">${esc(t('mk_view_listing'))}</span></div>
+          </section>`).join('') : `<div class="card mk-empty">${esc(t('mk_none_responses'))}</div>`}
+      </div>
+    </div>
+  `);
+  if (!host) return;
+  host.querySelectorAll('[data-dismiss]').forEach((b) =>
+    b.addEventListener('click', (ev) => { ev.stopPropagation(); market.dismissInterest(b.dataset.dismiss); openMyRequestsSheet(user); }));
+  host.querySelectorAll('.resp-card[data-mk-open]').forEach((card) =>
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-stop]')) return;
+      const post = market.getPost(card.dataset.mkOpen);
+      if (!post) return;
+      closeSheet();
+      setTimeout(() => openPostSheet(user, post), 220);
+    }));
+}
+
+/**
+ * The history — every response I was part of, accepted, rejected or still
+ * waiting, whether or not I cleared it from the notifications. Kept for 30
+ * days, with the countdown shown on each one.
+ */
+export function openHistorySheet(user) {
+  const uid = user && user.uid;
+  const rows = market.historyFor(uid);
+  const dateOf = (ms) => {
+    try { return new Date(ms || 0).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+    catch { return ''; }
+  };
+  const host = openSheet(`
+    <div class="mk-sheet-head sheet-roomy sheet-wide">
+      <h2 class="sheet-title" style="margin:0">${esc(t('mk_history'))}</h2>
+      <button type="button" class="icon-btn" data-sheet-close aria-label="${esc(t('mk_cancel'))}">${ICONS.close}</button>
+    </div>
+    <div class="resp-wrap">
+      <div class="mk-list">
+        ${rows.length ? rows.map((i) => {
+          const mine = i.toId === uid;                       // I owned the listing
+          const other = mine ? (i.fromName || t('mk_someone')) : (i.postCommodity || '');
+          const otherRole = mine ? (i.fromRole === 'buyer' ? t('mk_role_buyer') : t('mk_role_seller')) : '';
+          return `
+          <section class="card mk-card resp-card ${mine ? 'resp-in' : 'resp-out'}" data-mk-open="${esc(i.postId)}" role="button" tabindex="0">
+            <div class="mk-top">
+              <span class="mk-type ${i.postType === 'sell' ? 'mk-type-sell' : 'mk-type-buy'}">${typeIcon(i.postType)} ${esc(i.postCommodity)}</span>
+              <span class="mk-expiry ${i.status === 'new' ? 'is-soon' : i.status === 'rejected' ? 'is-no' : ''}">${esc(statusText(i.status))}</span>
+            </div>
+            <div class="mk-crop">${esc(other)}</div>
+            ${otherRole ? `<div class="mk-where">${ICONS.user} ${esc(otherRole)}</div>` : ''}
+            <div class="mk-facts">
+              <span>${ICONS.clock} ${esc(dateOf(i.createdAt))}</span>
+              <span class="mk-countdown">${esc(String(market.daysLeftInHistory(i)))} ${esc(t('mk_days_left'))}</span>
+            </div>
+            <div class="mk-actions"><span class="btn btn-outline">${esc(t('mk_view_listing'))}</span></div>
+          </section>`;
+        }).join('') : `<div class="card mk-empty">${esc(t('mk_none_responses'))}</div>`}
+      </div>
+    </div>
+  `);
+  if (!host) return;
+  host.querySelectorAll('.resp-card[data-mk-open]').forEach((card) =>
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-stop]')) return;
+      const post = market.getPost(card.dataset.mkOpen);
+      if (!post) return;
+      closeSheet();
+      setTimeout(() => openPostSheet(user, post), 220);
+    }));
+}
+
+/** The listing detail and the create form, both as bottom sheets. */
+function openPostSheet(user, post) {
+  const isSeller = store.getRole() !== 'buyer';
+  if (post && post.id) {
+    const dl = daysLabel(post);
+    const mine = user && post.authorId === user.uid;
+    openSheet(`
+      <div class="mk-top" style="margin-bottom:.6rem">
+        <span class="mk-type ${post.type === 'sell' ? 'mk-type-sell' : 'mk-type-buy'}">${typeIcon(post.type)} ${esc(typeLabel(post.type))}</span>
+        <span class="mk-expiry ${dl.soon ? 'is-soon' : ''}">${esc(dl.text)}</span>
+      </div>
+      <div class="mk-crop" style="font-size:1.35rem">${esc(post.commodity)}</div>
+      ${post.image ? `<img class="mk-img" src="${esc(post.image)}" alt="${esc(post.commodity)}" />` : ''}
+      <div class="mk-rows">
+        <div class="mk-row"><em>${esc(t('mk_quantity'))}</em><b>${esc(post.quantity)} ${esc(post.unit)}</b></div>
+        ${post.price ? `<div class="mk-row"><em>${esc(post.type === 'sell' ? t('mk_price_want') : t('mk_price_pay'))}</em><b>${esc(post.price)}</b></div>` : ''}
+        ${post.place ? `<div class="mk-row"><em>${esc(t('mk_place'))}</em><b>${esc(post.place)}</b></div>` : ''}
+        ${post.createdAt ? `<div class="mk-row"><em>${esc(t('mk_posted_on'))}</em><b>${esc(postDateLabel(post.createdAt))}</b></div>` : ''}
+        ${user && user.uid ? `<div class="mk-row"><em>${esc(t('mk_posted_by'))}</em><b>${esc(post.authorName || (mine ? store.myName() : '') || t('mk_someone'))}</b></div>` : ''}
+      </div>
+      ${post.notes ? `<p class="mk-note" style="margin-top:.6rem">${esc(post.notes)}</p>` : ''}
+      <div class="mk-actions" style="margin-top:.7rem">
+        <a class="btn btn-primary" href="${esc(telHref(post.phone))}">${ICONS.phone} ${esc(t('mk_call'))}</a>
+        <a class="btn btn-outline" href="${esc(waHref(post.phone, `${t('mk_wa_hi')} ${post.commodity}`))}" target="_blank" rel="noopener">${ICONS.chat} ${esc(t('mk_whatsapp'))}</a>
+      </div>
+      ${mine ? `<div class="mk-actions" style="margin-top:.5rem">
+        <button class="btn mk-act mk-act-edit" id="mk-edit-sheet" data-id="${esc(post.id)}">${ICONS.pencil} ${esc(t('mk_edit'))}</button>
+        <button class="btn mk-act mk-act-delete" id="mk-del-sheet" data-id="${esc(post.id)}">${ICONS.trash} ${esc(t('mk_delete'))}</button>
+      </div>` : ''}
+    `);
+    document.getElementById('mk-del-sheet')?.addEventListener('click', (e) => {
+      market.removePost(e.currentTarget.dataset.id); closeSheet(); toast(t('mk_deleted'));
+    });
+    document.getElementById('mk-edit-sheet')?.addEventListener('click', (e) => {
+      closeSheet(); setTimeout(() => openPostForm(user, market.getPost(e.currentTarget.dataset.id)), 220);
+    });
+    return;
+  }
+  openPostForm(user, null);
+}
+
+/** Create a listing — or edit an existing one. Same form, prefilled. */
+export function openPostForm(user, post) {
+  const isSeller = store.getRole() !== 'buyer';
+  const editing = Boolean(post && post.id);
+  const farm = store.getFarm();
+  const p = farm.profile || {};
+  const myCrop = (farm.crops || [])[0];
+  const place = post ? post.place : [p.district, p.state].filter(Boolean).join(', ');
+  const UNITS = ['quintal', 'tonne', 'kg', 'bag'];
+  const unit = editing && UNITS.includes(post.unit) ? post.unit : 'quintal';
+  // "₹ per quintal" must follow whatever unit is chosen
+  const pricePlaceholder = (u) => `₹ / ${u}`;
+  openSheet(`
+    <div class="mk-sheet-head">
+      <h2 class="sheet-title" style="margin:0">${esc(editing ? t('mk_edit_listing') : (isSeller ? t('mk_form_seller') : t('mk_form_buyer')))}</h2>
+      <button type="button" class="icon-btn" data-sheet-close aria-label="${esc(t('mk_cancel'))}">${ICONS.close}</button>
+    </div>
+    ${editing ? '' : `<p class="mk-note" style="margin:0 0 .8rem">${esc(isSeller ? t('mk_form_desc_seller') : t('mk_form_desc_buyer'))}</p>`}
+    <form class="mk-form" id="mk-form">
+      <label>${esc(t('crop_commodity'))}*${renderCombobox({ id: 'mk-crop', items: CROPS, common: COMMON_CROPS, value: post ? post.commodity : (myCrop ? myCrop.commodity : ''), placeholder: t('crop_search_ph'), noMatch: t('crop_no_match'), moreHint: t('crop_more_hint') })}</label>
+      <div class="mk-two">
+        <label>${esc(t('mk_quantity'))}*<input id="mk-qty" inputmode="numeric" value="${esc(editing ? post.quantity : '')}" required /></label>
+        <label>${esc(t('mk_unit'))}<select id="mk-unit">
+          ${UNITS.map((u) => `<option value="${u}"${u === unit ? ' selected' : ''}>${u}</option>`).join('')}</select></label>
+      </div>
+      <label>${esc(isSeller ? t('mk_price_want') : t('mk_price_pay'))}<input id="mk-price" value="${esc(editing ? post.price : '')}" placeholder="${esc(pricePlaceholder(unit))}" /></label>
+      <label>${esc(t('mk_place'))}*<input id="mk-place" value="${esc(place)}" required /></label>
+
+      <div class="mk-photo-field">
+        <input type="file" id="mk-photo" accept="image/*" hidden />
+        <div class="mk-photo-box ${editing && post.image ? '' : 'hidden'}" id="mk-photo-box">
+          <img class="mk-photo-preview" id="mk-photo-preview" src="${esc(editing && post.image ? post.image : '')}" alt="" />
+          <button type="button" class="mk-photo-x" id="mk-photo-x" aria-label="${esc(t('mk_photo_remove'))}">${ICONS.close}</button>
+        </div>
+        <button type="button" class="mk-add" id="mk-photo-btn">${ICONS.image} <span id="mk-photo-label">${esc(editing && post.image ? t('mk_photo_change') : t('mk_add_photo'))}</span></button>
+        <span class="mk-note">${esc(t('mk_photo_hint'))}</span>
+      </div>
+
+      <label>${esc(t('mk_phone'))}*<input id="mk-phone" inputmode="tel" value="${esc(editing ? post.phone : '')}" required /></label>
+      <label>${esc(t('mk_email'))} <span class="mk-note">(${esc(t('mk_optional'))})</span><input id="mk-email" type="email" value="${esc(editing ? post.email : '')}" /></label>
+      <label>${esc(t('mk_notes'))}<textarea id="mk-notes" rows="3">${esc(editing ? post.notes : '')}</textarea></label>
+      <label>${esc(t('mk_valid'))}<input id="mk-valid" inputmode="numeric" value="${editing ? market.daysLeft(post) || 3 : 15}" />
+        <span class="mk-note">${esc(t('mk_valid_hint'))}</span></label>
+      <button class="mk-submit" type="submit">${ICONS.check} ${esc(editing ? t('mk_save_changes') : (isSeller ? t('mk_submit_seller') : t('mk_submit_buyer')))}</button>
+    </form>
+  `);
+  wireCombobox('mk-crop');
+
+  const unitSel = document.getElementById('mk-unit');
+  const priceIn = document.getElementById('mk-price');
+  unitSel?.addEventListener('change', () => {
+    if (!priceIn.value.trim()) priceIn.placeholder = pricePlaceholder(unitSel.value);
+  });
+
+  // ── the photo: optional, shrunk in the browser, stored in Cloudinary ──
+  let photoUrl = editing ? post.image || '' : '';
+  const photoInput = document.getElementById('mk-photo');
+  const photoBox = document.getElementById('mk-photo-box');
+  const photoPreview = document.getElementById('mk-photo-preview');
+  const photoLabel = document.getElementById('mk-photo-label');
+  const showPhoto = (url) => {
+    photoUrl = url || '';
+    if (photoUrl) {
+      photoPreview.src = photoUrl;
+      photoBox.classList.remove('hidden');
+      photoLabel.textContent = t('mk_photo_change');
+    } else {
+      photoPreview.removeAttribute('src');
+      photoBox.classList.add('hidden');
+      photoLabel.textContent = t('mk_add_photo');
+    }
+  };
+  document.getElementById('mk-photo-btn')?.addEventListener('click', () => photoInput?.click());
+  document.getElementById('mk-photo-x')?.addEventListener('click', () => {
+    showPhoto('');
+    if (photoInput) photoInput.value = '';
+    toast(t('mk_photo_removed'));
+  });
+  photoInput?.addEventListener('change', async () => {
+    const file = photoInput.files && photoInput.files[0];
+    if (!file) return;
+    photoLabel.textContent = t('mk_photo_uploading');
+    try {
+      // 700 KB — small enough to upload fast, large enough to look sharp
+      const dataUrl = await shrinkImage(await readAsDataUrl(file), 700 * 1024);
+      const url = await uploadMarketPhoto(dataUrl);
+      if (url) {
+        showPhoto(url);
+        toast(t('mk_photo_added'));
+      } else {
+        photoLabel.textContent = t('mk_photo_failed');
+      }
+    } catch {
+      photoLabel.textContent = t('mk_photo_failed');
+    }
+  });
+
+  document.getElementById('mk-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const crop = document.getElementById('mk-crop').value.trim();
+    const qty = document.getElementById('mk-qty').value.trim();
+    const phone = document.getElementById('mk-phone').value.trim();
+    if (!crop || !qty || !phone) return;
+    const fields = {
+      commodity: crop, quantity: qty,
+      unit: unitSel.value,
+      price: priceIn.value.trim(),
+      place: document.getElementById('mk-place').value.trim(),
+      phone, email: document.getElementById('mk-email').value.trim(),
+      notes: document.getElementById('mk-notes').value.trim(),
+      image: photoUrl,
+      validDays: Number(document.getElementById('mk-valid').value) || 15,
+    };
+    if (editing) {
+      market.editPost(post.id, {
+        ...fields,
+        expiresAt: Date.now() + fields.validDays * 86400000,
+        status: 'open',
+      });
+      closeSheet();
+      marketView.tab = 'mine';
+      const body = document.getElementById('mk-body');
+      if (body) body.innerHTML = marketBody(user);
+      toast(t('mk_updated'));
+      return;
+    }
+    const created = await market.addPost({
+      ...fields,
+      type: isSeller ? 'sell' : 'buy',
+      authorRole: isSeller ? 'farmer' : 'buyer',
+      authorName: store.myName(),
+    });
+    closeSheet();
+    marketView.tab = 'mine';
+    const body = document.getElementById('mk-body');
+    if (body) body.innerHTML = marketBody(user);
+    toast(created && created.syncError ? t('mk_post_local_only') : t('mk_posted'));
+  });
 }

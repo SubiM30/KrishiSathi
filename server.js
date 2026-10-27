@@ -20,6 +20,7 @@ app.use(express.json({ limit: '8mb' }));
 app.use('/api/chat', require('./src/routes/chat'));
 app.use('/api/diagnose', require('./src/routes/diagnose'));
 app.use('/api/mandi', require('./src/routes/mandi'));
+app.use('/api/market', require('./src/routes/market'));
 app.use('/api/weather', require('./src/routes/weather'));
 app.use('/api/voice', require('./src/routes/voice'));
 app.use('/api/summarise', require('./src/routes/summarise'));

@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { groqVision } = require('../services/groq');
 const { rateLimit } = require('../middleware/rateLimit');
+const { uploadToCloudinary } = require('../services/cloudinary');
 
 const router = express.Router();
 
@@ -39,35 +40,6 @@ Return ONLY valid JSON with exactly these keys:
 
 Be honest about uncertainty. Never invent a disease you cannot see evidence for.`;
 
-/** Upload a base64 image to Cloudinary (signed, no SDK needed). Returns null if not configured. */
-async function uploadToCloudinary(dataUrl) {
-  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
-  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) return null;
-
-  const timestamp = Math.floor(Date.now() / 1000);
-  const folder = 'krishisathi/diagnoses';
-  // Signed uploads require: sha1("folder=<f>&timestamp=<t><api_secret>")
-  const signature = crypto
-    .createHash('sha1')
-    .update(`folder=${folder}&timestamp=${timestamp}${CLOUDINARY_API_SECRET}`)
-    .digest('hex');
-
-  const form = new FormData();
-  form.append('file', dataUrl);
-  form.append('api_key', CLOUDINARY_API_KEY);
-  form.append('timestamp', String(timestamp));
-  form.append('folder', folder);
-  form.append('signature', signature);
-
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-    method: 'POST',
-    body: form,
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!res.ok) return null; // storage is best-effort; diagnosis can continue
-  const data = await res.json();
-  return data.secure_url;
-}
 
 router.post('/', async (req, res, next) => {
   try {
@@ -84,7 +56,7 @@ router.post('/', async (req, res, next) => {
     // 1) Store in Cloudinary (optional — skipped gracefully if not configured)
     let imageUrl = null;
     try {
-      imageUrl = await uploadToCloudinary(imageDataUrl);
+      imageUrl = await uploadToCloudinary(imageDataUrl, 'krishisathi/diagnoses');
     } catch (e) {
       console.warn('Cloudinary upload skipped:', e.message);
     }

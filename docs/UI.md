@@ -570,3 +570,525 @@ exit animation cancels the pending hide, and `prefers-reduced-motion` skips stra
 Verified: the sheet reports `sheetDown` mid-close with opacity falling (0.74 at 90ms) and is
 hidden after; the backdrop runs `fadeOut`; the modal runs `fadeOut` + `popOut`; re-opening
 mid-close works cleanly. All 255 strings exist in all 23 languages.
+
+---
+
+# v23.0 — searchable crop picker
+
+The crop field was a `<select>` over a hand-written list of 34 crops, so most of what
+AGMARKNET actually tracks could not be chosen at all.
+
+**The list.** `public/js/crops.js` now carries the **official AGMARKNET commodity master —
+604 commodities across the 16 government groups** (Cereals, Pulses, Oil Seeds, Vegetables,
+Fruits, Spices, Flowers, Dry Fruits, Fibre Crops, Beverages, Medicinal and Aromatic Plants,
+Drug and Narcotics, Forest Products, Live Stock/Poultry/Fisheries, Oils and Fats, Others).
+It is taken from the AGMARKNET (Directorate of Marketing & Inspection) commodity lookup
+tables — the same names the government price API uses — and bundled so search is instant
+and works offline. The 36 everyday crops are kept at the top of the list.
+
+**The picker.** `public/js/combobox.js` renders a text box with a suggestion list
+underneath: typing filters, each suggestion shows the crop and its official group, arrow
+keys move, Enter picks, Escape closes. Opening a filled field shows the **whole** list with
+the current value highlighted, so changing your mind is one click.
+
+The important design choice: the element the app talks to keeps the **same id and the same
+`.value`** as the old `<select>`, so every existing `document.getElementById('m-commodity').value`
+read/write kept working untouched. Used by the Mandi page and the My Farm crop form.
+
+Verified: 604 crops and 16 groups in both pickers; the farmer's own crop prefills; searching
+"turmeric" finds 4 matches; picking sets the value, closes the list, and the chosen crop
+reaches the API (`commodity=Turmeric`); keyboard and Escape work; and the whole existing
+suite still passes.
+
+### v23.1
+
+| Report | Fix |
+|---|---|
+| The "Crop Doctor" label in the bottom bar had the top of the "D" clipped | The raised centre button carries a **4px ring** (`box-shadow: 0 0 0 4px var(--surface)`) that separates it from the bar. That ring reaches 4px *below* the icon's box, and the tab's flex gap was only 2px — so the ring landed on the top of the label and shaved the tops of the tall letters (the flat-topped "D" made it obvious). The centre tab's gap is now 8px, which clears the ring by 4px. The bar is bottom-anchored, so **the label does not move on screen** and still lines up with the other four; the tab simply grows into the spare height (the bar is ~65px against a 74px reserve). Measured at 320/360/390/430px: no clipping, 4px clearance |
+
+---
+
+# v24.0 — the marketplace (Phase 1)
+
+The missing half of sowing-to-selling: a two-sided board where a farmer and a buyer
+reach each other directly.
+
+**Two kinds of listing.** A farmer posts **Want to Sell** (what they have, how much,
+what they want for it); a buyer posts **Want to Buy**. Both are public — anyone can
+browse. One account holds **one role**, and the role decides which kind you can create.
+On a buyer's post a farmer sees a **Sell** button; on a farmer's post a buyer sees **Buy**.
+
+**The surface is harvest gold.** The market runs on its own background, hue-shifted from
+the app's green at the same lightness (`#f8f5f0` against `#f1f6f2`), so it tints rather
+than shouts. The farmer's post card is golden, the buyer's is green, and the two badges
+(Want to Sell in green, Want to Buy in indigo) are what tell the sides apart. Dark mode
+needed a slight lightness lift for the hue to exist at all.
+
+**Each listing** carries the crop, quantity and unit, price, place, and the days left —
+which turn amber inside three days and read "Expired" once the window closes. The card
+has three actions in one row: the gold Sell/Buy, a green Call, and a white WhatsApp.
+Tapping the card opens the full detail with the same two contact links.
+
+**Managing a listing.** My listings shows Extend, Close and Delete; an expired listing
+promotes Extend to the primary action so it is one tap from coming back. A listing is
+never deleted when its window closes — it simply reads as expired.
+
+**Posting needs an account** — the buyer has to be able to reach you, so the button reads
+"Login" and opens the login modal when signed out. The form reuses the searchable crop
+picker, prefills the place from the profile, takes a phone number (required) and an
+optional email, and asks how many days the listing should run.
+
+**Data.** `market.js` mirrors `store.js`: localStorage on the device, mirrored to a
+`marketPosts` collection once signed in, so listings follow the account across devices.
+Cleared on logout with the rest of the device data.
+
+**Phase 2 (not yet built):** the structured interest — a farmer attaching crop photos to
+a response, and the buyer being notified. Today the Sell/Buy button opens the listing and
+contact is direct by call or WhatsApp.
+
+Verified: role-aware feed, title and copy; the golden/green surfaces; posting gated on
+sign-in; the 15-day window, extend, close, delete and expiry; the detail sheet's `tel:`
+and pre-filled `wa.me` links; no horizontal overflow at 320 or 1440px; and the whole
+existing suite still passes.
+
+### v24.1 — market corrections
+
+| Report | Cause and fix |
+|---|---|
+| The page background was still the app's green, not the golden surface | The golden tokens were set on `.page-market`, but the page is painted by **`body`**, which sits outside that element — so only the page's own subtree was tinted and the visible background never changed. The tokens are now set on `body:has(.page-market)` and `.app-body:has(.page-market)` too |
+| The Post button had a heavy border unlike every other button | It is a `<button>`, and no rule reset the element's **browser default border**. `.mk-post-btn` now sets `border: 1.5px solid transparent`, like `.btn` does |
+| The form's "Post my listing" button rendered grey | The form lives in a **bottom sheet, which is outside `.page-market`**, so the role-scoped `.mk-seller .mk-submit` / `.mk-buyer .mk-submit` rules never matched and it fell back to the browser default. `.mk-submit` is now the app's standard green primary button, self-contained |
+| A visitor saw a farmer-flavoured page and a bare "Login" | A visitor is not a farmer — farmers have their own account and are signed in — so **an unsigned visitor now gets the buyer view**: the buyer badge, "Buy directly", and a post card reading **"Want to buy something?" / "Log in and farmers will call you"** with a full-width **"Login as buyer"** button that records the buyer role before opening the login modal. They can still browse every listing |
+
+### v24.2 — the market actually works
+
+**Why a listing never appeared.** Two separate faults, both silent:
+
+1. **`firestore.rules` denied the board.** The rules ended with "everything else is private
+   (deny all)", so every read and write to `marketPosts` was refused. The market is a *public*
+   board, so it now has its own block: `read` for everyone (a farmer must be able to find a
+   buyer without an account), `create` only when the author id matches the signed-in uid, and
+   `update`/`delete` only by the author.
+2. **`addDoc` was being handed an `undefined` value.** Firestore rejects any `undefined` field
+   and throws — `addPost` spread the whole post in, including `id: undefined`, so *every* save
+   failed. Writes now go through a `clean()` helper that drops undefined/null fields.
+
+Both were hidden by an empty `catch`. Failures are now logged, and a listing that could not
+reach the board says so: **"Saved on this device — could not reach the board."**
+
+**Login as a buyer now means something.** The market's button asks app.js to open the login
+modal *in a role's name* (via a `ks:login` event), so the modal title, hint and submit button
+all read as a buyer. The role is applied **after** the profile is hydrated from Firestore,
+which is why a new sign-up used to revert to farmer.
+
+**Everything else on the page** is role-aware: a visitor gets the buyer view, a signed-in
+farmer the seller view, and the copy follows.
+
+**Spacing.** The chips, the search and the listing list had no gap at all — `#mk-body` had no
+layout of its own, so its children stacked flush. It is now a grid with an 0.85rem gap.
+
+**Photos.** A listing takes an optional photo. The browser shrinks it, `POST /api/market/image`
+stores it in Cloudinary (`krishisathi/market`, via the uploader now shared with the crop
+doctor) and only the URL is kept. The card shows it as a social-post header, and tapping the
+photo opens the details. With storage unconfigured the field says so and the listing still
+posts.
+
+**CTA.** One row — icon, copy, button. Copy: *"Want to buy something?" / "Log in as a buyer to
+start buying and post what you need" / [Login as buyer]*, mirrored for a seller.
+
+### v24.3 — market polish, naming and the buyer's own shell
+
+**Filters.** "Want to Sell / My Listings" was doing two jobs badly. The board now has
+four filters in classifieds language — **All · For Sale · Wanted · My Listings**, with
+**All** selected by default. A card badge still reads Want to Sell / Want to Buy, which is
+the right register for a listing; the chips are the right register for a filter.
+
+**The CTA card.** Heading on ONE line, sub-text free to wrap, all in one row — and
+"buyers will call you" became **"buyers will contact you"**, which is the professional
+wording. Getting the heading onto one line meant measuring: the login button ("Login as
+buyer") was 129px wide and squeezed the heading to 75px at 320px. Dropping the button's
+redundant icon and tightening its type brought it to 104px, so the heading now holds one
+line from **360px up** in both the visitor and signed-in states. At 320px the visitor
+heading still wraps — that width cannot hold the icon, a 155px heading and the button.
+
+**Borders.** The warm surface had tinted every hairline gold, which read as muddy on
+ordinary cards and worse in dark mode. Only the CTA card keeps a coloured edge now; all
+other hairlines are neutral warm greys (`#e8e2d8` light, `#332c20` dark).
+
+**The bottom bar is aligned again.** The raised centre button's ring needs a 6px gap, and
+that extra depth was pushing the centre label **5px below** the other four. Shrinking the
+icon's negative margin from -20px to -28px restores the tab's original depth, so all five
+labels sit on the same baseline (measured spread: 0px) with the ring still 2px clear.
+
+**The buyer's section is its own shell.** The farmer tab bar is hidden there — a buyer has
+no use for Mandi Prices or Crop Doctor — and a floating home button sits bottom-left. A
+signed-in farmer keeps the bar.
+
+**Naming follows the role.** The More entry is **Direct Selling** for a signed-in farmer
+and **Direct Buying** for a buyer or visitor.
+
+**Shortcuts.** Crop Doctor is out; **Direct Selling** is in, with a handshake icon on a
+harvest-gold tile (brighter and yellower than the Sell Advisor's amber so the two do not
+read as the same thing).
+
+### v24.4 — nine fixes to the market
+
+**1 · The toast.** It was a 560px black bar with centred white text. It is now a small
+pill that hugs its text, sits on the app's own surface, carries a green tick and reads
+left-aligned — the same shape as any well-made app.
+
+**2 · The board was invisible to visitors.** `hydrateMarket()` was called *inside* the
+`if (user)` branch, so a signed-out visitor never loaded the listings at all — they saw
+only whatever that one device had stored. It now runs whether or not anyone is signed in
+(the rules allow public read, which is the whole point of the board).
+
+**3 · The price placeholder.** It was hard-coded to "₹ per quintal". It now follows the
+chosen unit — "₹ / tonne" the moment you switch.
+
+**4 · The photo field.** Rebuilt: the picture with a **cross on it** to remove it, and the
+upload button moved **below** the picture where you asked for it, reading "Change photo"
+once one is set. The old grey "Photo added" bar that stayed clickable is gone, and the
+field now follows the market's warm surface instead of the crop doctor's green.
+
+**5 · Photos are compressed harder.** 700 KB rather than 1 MB — still sharp, faster to
+upload.
+
+**6 · Desktop gets a panel, not a sheet.** A bottom sheet is right on a phone and wrong on
+a 1440px screen, so `openSheet()` now renders into a centred floating panel on wide
+screens and the sheet on phones. Every overlay that used it inherits the behaviour.
+
+**7 · Edit.** A listing can be corrected now — Edit sits beside Extend, on the card and in
+the detail. The form prefills and saves over the original.
+
+**8 · Extend is three days**, not fifteen.
+
+**9 · Actions are coloured by what they do.** Extend is green (it moves the listing
+forward), Edit and Close are neutral, and **Delete is red** — the one destructive action,
+coloured as it is everywhere else.
+
+### v24.5 — the search bug, four UI fixes, and the interest loop
+
+**1 · The search reversed everything you typed.** Typing "ABCDEFGH" produced "HGFEDCBA".
+Cause: every keystroke rebuilt the whole market body, which recreated the `<input>` — and a
+recreated input puts the caret back at position 0, so each new letter was inserted at the
+front. Only the **list** is re-rendered now (`rerenderList()`), leaving the field and its
+caret alone. Verified with real keystrokes: value "ABCDEFGH", caret at 8.
+
+**2 · The Edit button's label sat off-centre.** `ICONS.pencil` did not exist — the icon Proxy
+returned an empty 24px box, which pushed the text sideways. The icon is added (and to the
+offline fallback), so the label is centred again.
+
+**3 · The Notes box dragged the form sideways.** A textarea is horizontally resizable by
+default, and dragging it widened the page. Now `resize: vertical`, and every field is capped
+at 100% width.
+
+**4 · The signed-out card.** It now stacks the way you sketched it: icon and copy on the first
+row, and **the login button on a row of its own**. That also gives the heading the full column
+width, so "Want to buy something?" stays on one line instead of breaking.
+
+**5 · The interest loop.** Buy and Sell now *notify the author* rather than only opening the
+listing:
+
+- Tapping **Buy** on a farmer's listing (or **Sell** on a buyer's) records an interest
+  addressed to the listing's author, and confirms it with a toast — "The seller has been
+  notified of your interest".
+- The author gets a **notification card** at the top of the market page with an unseen count.
+  Tapping it lists everyone who responded, with their role, a **Call** and **WhatsApp**
+  button, and **Accept**.
+- The person who responded gets an **Interests** filter showing the listings they replied to,
+  marked *Awaiting reply* or *Accepted*.
+
+Stored in a new `marketInterests` collection (publicly readable so the author can see who
+responded; create restricted to the responder, update to the two people involved) with the
+usual local mirror. **Re-publish `firestore.rules`** for this to cross devices.
+
+## v24.6 — built on v24.5, as asked
+
+This is the v24.5 code with the reported bugs fixed in place. No shared-component layer,
+no rewrite — the same files, the smallest change that fixes each fault.
+
+### The role — the one that mattered
+
+**A login was rewriting the account's role.** `app.js` applied `pendingRole` — the role the
+login modal is merely *displayed* as — on **every** auth change:
+
+```js
+if (pendingRole) { setRole(pendingRole); pendingRole = null; }   // the bug
+```
+
+So a farmer who opened the app signed out, tapped the market's **Login as buyer**, and signed
+in with their own farmer account, had `role: 'buyer'` written into their profile and pushed to
+Firestore. From then on the account was a buyer everywhere, and it survived logging out
+because it lived in the cloud.
+
+A role is now chosen **only when an account is created** (`signupRole`), and cleared on every
+plain login and on Google sign-in. Settings → *Using KrishiSathi as* lets you correct an
+account that was already changed.
+
+**The two logins are distinct again.** The market's button was asking for a role read from the
+*stored farm* — `farmer` by default — so "Login as buyer" opened the **farmer** login. That was
+the switch. It now asks for `buyer`, because signed out the market page is the buyer's page.
+
+### The rest
+
+- **The notice no longer vanishes.** `openInterestsSheet()` called `notif.remove()` on itself
+  and nothing re-rendered it, so it only came back on a reload. It is derived from state now,
+  and only appears when there is at least one response.
+- **The filter row is listings only.** All / For Sale / Wanted / My listings. Responses are a
+  different kind of thing and moved to the notice and the bell.
+- **Your own posts show your actions on every filter.** `mine` was `tab === 'mine'`, so anywhere
+  else your own listing offered Buy/Sell, which you cannot do to yourself.
+- **The bell sits in the top bar**, in its own slot left of the language selector.
+- **The respond button becomes *Sent***, loses the amber highlight, and a second tap says
+  *"Notification already sent!"*.
+- **"Posted by" shows the name only** — it read `Test 1 · Farmer · seller`, which says it twice.
+
+### The role-aware entry, confirmed intact
+
+The More entry still reads **Direct Selling** for a signed-in farmer and **Direct Buying** for a
+buyer or visitor (`navLabel()` with `roleName: true`), the page keeps its golden theme and
+golden post card, and the market heading follows the role.
+
+### v24.7 — the login decides the role, and the accept actually saves
+
+**The way you sign in is the role you get.** This is a deliberate change of direction from
+v24.6. Previously a login left the stored role alone, which meant anyone who signed in through
+the wrong door had to go into Settings to correct it. Now:
+
+- the **Login button in the top bar** is the farmer's way in, and the default role is `farmer`
+- the market's **"Login as buyer"** signs you in as a `buyer`
+
+So a mistake corrects itself the next time you sign in through the right door, and Settings is
+only there if you want it. A plain page load sets no role at all, so a returning session keeps
+whatever it already has.
+
+**The accepted response was never saved.** `acceptInterest()` only wrote to Firestore when the
+interest had a `cloudId`:
+
+```js
+if (uid() && it && it.cloudId) updateInterest(it.cloudId, { status: 'accepted' })   // the bug
+```
+
+But `loadInterests()` returns `{ id: d.id, ...d.data() }` — an interest pulled from Firestore
+carries its document id as **`id`** and has **no `cloudId`**. So an accept on a real (cloud)
+response wrote nothing. On the next load, `hydrateInterests()` pulled the old `status: 'new'`
+copy back over the local one and the accept silently undid itself. That is exactly the reported
+symptom: it says Accepted, then a refresh puts it back.
+
+It now writes using `it.cloudId || it.id`, which is the correct document id in both cases.
+
+**The responder is now told.** An accepted response sets a local `responderSeen` flag, and the
+bell counts accepted responses of yours that you have not looked at yet — alongside the
+responses waiting for you. Opening the responses sheet clears both. Nothing new is stored in
+Firestore for this; it is a per-device "have I seen it" mark.
+
+The shipped `firestore.rules` already permit the write: the update rule allows the listing's
+author (`toId`) as well as the responder (`fromId`).
+
+### v24.8 — the ten reported issues
+
+**The `cloudId` bug, on four more writes.** v24.7 fixed it for the accept; it turns out
+**edit, close, extend and delete** had it too:
+
+```js
+if (uid() && p && p.cloudId) deletePost(p.cloudId)     // never ran for a cloud post
+```
+
+`loadPosts()` returns `{ id: d.id, ...d.data() }`, so a post pulled from Firestore carries its
+document id as **`id`** and has **no `cloudId`**. Every one of those actions wrote nothing, and
+the next load put the old copy back — which is why a deleted post reappeared after a reload.
+All four now use `p.cloudId || p.id`.
+
+**The bell count went stale.** Nothing repainted the top bar when the market changed, so after
+accepting or opening the responses sheet the number stayed. The market now fires a
+`ks:refresh-chrome` event and the app repaints the bell.
+
+**The bell's number is centred** — `line-height: 1` with `border-box`, so the digit sits in the
+middle of its circle instead of low.
+
+**The whole post card is the tap target**, not just the crop text and the photo. Buttons and
+links inside a card are excluded, so tapping Call still only calls.
+
+**A response card is tappable through to the listing it is about.**
+
+**The two notification sections are now unmistakable.** They had the same shape, so nothing told
+them apart:
+- **Responses to your listings** — a **green** edge, the responder's **name** as the headline,
+  their role, and Call / WhatsApp / Accept. It is about a *person*.
+- **Your responses** — a **gold** edge, the **crop** as the headline, the quantity and price and
+  place, and View listing. It is about a *listing*.
+Both headings carry a count.
+
+**A little breathing room inside the new sheets** — the market form and the responses list are
+inset the way the language picker is. The older sheets are untouched.
+
+**Deleting a listing removes its responses**, so nothing is left pointing at a post that is gone.
+
+**Notification history is pruned after 7 days.**
+
+**The profile menu closes on an outside click.** It passed `{ once: true }`, so the outside-click
+handler fired once and removed itself; after that the menu only closed by tapping the avatar
+again.
+
+### v24.9 — notifications you can clear, and a menu that closes
+
+**The bell's number came back after a refresh.** `markInterestsSeen()` only writes locally — and
+rightly so, "have I looked at this" is a mark this device makes, not something to store in
+Firestore. But `hydrateInterests()` put the **cloud** copy first in the merge and de-duplicated
+by id, so the cloud's `seen: false` won and the local `seen: true` was thrown away. The merge now
+carries the local flags over (`seen`, `responderSeen`, `dismissed`), so the count stays gone.
+
+**Notifications can be cleared** — a **Clear all** button in the sheet's header, and a small cross
+on each card to drop just that one. Both are *dismissals*, not deletions: the record stays in
+Firestore, this device just stops showing it. That matters, because an actual delete would come
+straight back on the next load — the same trap as the accept and the delete bugs.
+
+**A "My Requests" button**, top right of the market page (in the page header, not the
+navigation), with a count. It opens just the **Your responses** half — the listings I responded
+to — so that half is reachable without opening the full notification sheet.
+
+**The profile menu now closes every time.** v24.8's outside-click handler removed itself after the
+first click, so it only worked once per page load. There is now a single listener registered once,
+which looks the menu up by id each time — necessary because the account area is re-rendered.
+
+### v24.10 — the header row, rejecting, and the history
+
+**The buttons moved up to the badge row.** "My Requests" sat beside the `h1`, which squeezed the
+description into three short lines. The role badge and the page's own buttons now share one row
+(`.mk-toprow`), so the heading and the description get the full width — the description is back to
+a single line. The chat icon came off the button too; the label says it.
+
+**The cross on a waiting response means NO.** On a response that is still `new`, the cross is a
+decision: it sets the status to `rejected` and the person who responded is told, exactly the way
+an accept tells them. On anything else the cross only clears the card from the list.
+
+**The history.** A clock icon beside My Requests opens every response I was part of — accepted,
+rejected or still waiting — whether or not I cleared it from the notifications. Each row carries
+the date, the outcome and a countdown.
+
+Two clocks, deliberately different:
+
+- **7 days** — how long a response still counts as a *notification*.
+- **30 days** — how long the *record* is kept, which is what the history shows. Only after that
+  is it let go.
+
+So a response drops out of the notifications after a week but stays in the history for a month,
+and each history row shows how long it has left. Every row is tappable through to its listing.
+
+### v24.11 — placement, the icon, and post dates
+
+**The layout.** History and My Requests were both crowded onto the badge row. They are now
+where they belong:
+
+- **History** — the icon button, at the **right of the badge row**, level with `FARMER · SELLER`.
+- **My Requests** — beside the **heading**, level with "Sell directly".
+
+The description therefore keeps the full width and stays on one line, which was the point.
+
+**The history icon** is the Lucide `rotate-ccw-clock` — a clock face with a return arrow, the one
+you sent. It is in the icon set as `historyClock` (and in the offline fallback), so it inherits
+`currentColor` and the app's stroke weight like every other icon.
+
+**Tooltips.** Both buttons carry `title` and `aria-label`, so hovering explains them and screen
+readers announce them.
+
+**Posts now carry their date**, as a green badge in the card's top row, between the type badge and
+the days left — which is exactly where you suggested. It reads **Today**, **Yesterday**, or an
+absolute date like **21 Oct, 2026**, the way a feed does. The detail sheet shows the full date as
+a "Posted on" row.
+
+Note: `views.js` already had a `dateLabel()` used by the Mandi and Weather pages, which takes a
+date *string*. The new one is `postDateLabel()` and takes a timestamp, so the existing one is
+untouched.
+
+### v24.12 — the market page on a wide screen
+
+Two faults, both only visible above 1024px.
+
+**The left rail had vanished.** The rule that gives the buyer's section its own shell was never
+scoped to phones:
+
+```css
+body:has(.page-market.mk-buyer) .tabbar { display: none; }   /* all widths */
+```
+
+On a phone that is right — a buyer has no use for the farmer tab bar, and the floating home
+button takes its place. But **above 1024px the tab bar IS the left rail**, so the market page was
+left with no navigation at all and just that floating home button. It is now inside
+`@media (max-width: 1023px)`, and the floating home button is hidden above 1024px where the rail
+already has a Home entry.
+
+**The listings stretched instead of forming a grid.** `.mk-list` was a single-column grid, so a
+card grew with the viewport — at 1400px a card was the full content width with a very wide image.
+It now behaves like the home page's `.crop-grid`: one column on a phone, two from 760px, three
+from 1200px. At 1400px a card is ~350px instead of ~1080px.
+
+Measured after the fix:
+
+| width | rail | columns | card width |
+|---|---|---|---|
+| 1400px | visible, 268px, 10 items | 3 | 351px |
+| 1180px | visible, 250px, 10 items | 2 | 432px |
+| 390px | hidden (by design) | 1 | 363px |
+
+One ordering trap worth recording: the first attempt at hiding the floating home button put the
+`@media (min-width: 1024px)` rule *before* `.mk-home`'s own `display: grid`, so the base rule won.
+It has to come after.
+
+### v24.13 — panel columns follow the panel, not the window
+
+**The bug was mine, from v24.12.** The listing grid used viewport media queries:
+
+```css
+@media (min-width: 760px)  { .mk-list { grid-template-columns: repeat(2, …); } }
+@media (min-width: 1200px) { .mk-list { grid-template-columns: repeat(3, …); } }
+```
+
+That is right for a full-width page but wrong inside a panel. On a 1180px screen a **560px** panel
+was being handed three columns and looked crushed. The grid now measures its own container:
+
+```css
+.mk-list { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+```
+
+`auto-fill` decides the column count from the width **available to the list**, so one rule is
+correct both on the page and inside a panel. `min(300px, 100%)` keeps a single column from
+overflowing on a very narrow phone.
+
+**The panels also get more room on a wide screen**, so they can actually hold two or three
+columns: `.sheet:has(.sheet-wide)` from 768px, and `.modal-panel:has(.sheet-wide)` from 1024px —
+the latter because `openSheet()` swaps the bottom sheet for `#form-panel` above 1024px, so the
+panel that widens there is a different element.
+
+Measured:
+
+| viewport | page list | panel | panel columns | card width |
+|---|---|---|---|---|
+| 390px | 1 col | 390px | 1 | 337px |
+| 768px | 2 cols | 720px | 2 | 326px |
+| 1180px | 2 cols | 1000px | 3 | 300px |
+| 1500px | 3 cols | 1000px | 3 | 300px |
+
+No card is ever narrower than 300px.
+
+### v24.14 — the card action buttons no longer spill out of the card
+
+One line of CSS. `.mk-actions .btn` had `flex: 1 1 0` **with** `min-width: 0`, but `.btn` is
+`white-space: nowrap` — so a button could shrink narrower than its own label, and the label then
+spilled out of the box instead of the row wrapping. It showed on a narrow card: the page was
+giving three columns while the rail had not come on yet (roughly 900–1023px), so each card was
+about 300px and "Extend" and "WhatsApp" ran off the edge.
+
+```css
+.mk-actions .btn { flex: 1 1 auto; min-width: 5.1rem; max-width: 100%; overflow: hidden; }
+```
+
+`flex: 1 1 auto` with a real `min-width` makes the row wrap to a second line instead of crushing
+the labels. Measured at 360, 390, 900, 1000, 1023, 1180 and 1500px: no label is clipped, no button
+sits outside its card, and no button is narrower than 82px.
+
+- A three-button row (Sell / Call / WhatsApp) stays on one line down to a 333px card.
+- A four-button row (Edit / Extend / Close / Delete) wraps to a tidy 2×2 when the card is under
+  roughly 420px, and stays on one line above that.
+
+Nothing else was touched.

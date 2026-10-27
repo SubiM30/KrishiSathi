@@ -13,7 +13,8 @@ import {
   initFirebase, isGuest, setGuest,
   loginEmail, signUpEmail, loginGoogle, logout, onAuthChange,
 } from './auth.js';
-import { hydrate, subscribe as subscribeFarm, clearLocalData } from './store.js';
+import { hydrate, subscribe as subscribeFarm, clearLocalData, setRole, getRole, myName } from './store.js';
+import { hydrate as hydrateMarket, hydrateInterests, clearLocal as clearMarketLocal } from './market.js';
 import { initSheet, openSheet, closeSheet, isSheetOpen } from './sheet.js';
 import { showAnimated, hideAnimated } from './motion.js';
 import {
@@ -25,7 +26,8 @@ import {
   renderSchemes, wireSchemes,
   renderChat, wireChat,
   renderFarm, wireFarm,
-  renderSettings, wireSettings,
+  renderMarket, wireMarket, bellButton, openInterestsSheet,
+  renderSettings, wireSettings, initVoiceAsk,
 } from './views.js';
 import { ICONS } from './icons.js';
 import { t, LANGS, LANG_NAMES_EN, getLang, setLang } from './i18n.js';
@@ -50,7 +52,8 @@ const MORE = [
   { id: 'sell',     href: '#/sell',     icon: 'scale',    i18n: 'nav_sell'     },
   { id: 'farm',     href: '#/farm',     icon: 'sprout',   i18n: 'nav_farm'     },
   { id: 'schemes',  href: '#/schemes',  icon: 'scroll',   i18n: 'nav_schemes'  },
-  { id: 'settings', href: '#/settings', icon: 'settings', i18n: 'nav_settings' },
+  { id: 'market',   href: '#/market',   icon: 'handshake', i18n: 'nav_market', roleName: true },
+  { id: 'settings', href: '#/settings', icon: 'settings',  i18n: 'nav_settings' },
 ];
 
 /* ════════════════════════════════════════════════════════════════ */
@@ -73,6 +76,7 @@ const routes = {
   schemes: { render: renderSchemes, wire: wireSchemes },
   chat: { render: renderChat, wire: () => wireChat(currentUser) },
   farm: { render: renderFarm, wire: () => wireFarm(currentUser) },
+  market: { render: () => renderMarket(currentUser), wire: () => wireMarket(currentUser) },
   settings: { render: () => renderSettings(currentUser), wire: () => wireSettings(currentUser) },
 };
 
@@ -103,12 +107,25 @@ subscribeFarm(() => {
 
 /* ── Navigation: build the bar/rail from the config ── */
 function tabHtml(item) {
-  const inner = `<span class="tab-ic">${ICONS[item.icon]}</span><span class="tab-label">${t(item.i18n)}</span>`;
+  const inner = `<span class="tab-ic">${ICONS[item.icon]}</span><span class="tab-label">${navLabel(item)}</span>`;
   const cls = `tab${item.center && !isDesktop() ? ' tab-center' : ''}`;
   if (item.action === 'more') {
-    return `<button class="${cls}" type="button" data-nav="${item.id}" aria-label="${t(item.i18n)}">${inner}</button>`;
+    return `<button class="${cls}" type="button" data-nav="${item.id}" aria-label="${navLabel(item)}">${inner}</button>`;
   }
-  return `<a class="${cls}" href="${item.href}" data-nav="${item.id}" aria-label="${t(item.i18n)}">${inner}</a>`;
+  return `<a class="${cls}" href="${item.href}" data-nav="${item.id}" aria-label="${navLabel(item)}">${inner}</a>`;
+}
+
+/**
+ * A nav item's label. Most are fixed; the market one names the job the
+ * signed-in person actually has — a farmer goes there to SELL, a buyer (or a
+ * visitor) to BUY.
+ */
+function navLabel(item) {
+  if (item.roleName) {
+    const isSeller = getRole() !== 'buyer' && Boolean(currentUser && currentUser.uid);
+    return t(isSeller ? 'nav_direct_selling' : 'nav_direct_buying');
+  }
+  return t(item.i18n);
 }
 
 function buildTabbar() {
@@ -159,7 +176,7 @@ function openMoreSheet() {
       ${MORE.map((m) => `
         <a class="more-tile" href="${m.href}">
           <span class="more-tile-ic">${ICONS[m.icon]}</span>
-          <span class="more-tile-label">${t(m.i18n)}</span>
+          <span class="more-tile-label">${navLabel(m)}</span>
           <span class="more-tile-arrow">${ICONS.chevronRight}</span>
         </a>`).join('')}
     </div>
@@ -167,7 +184,7 @@ function openMoreSheet() {
 }
 
 function openLanguageSheet() {
-  openSheet(`
+  const host = openSheet(`
     <div class="sheet-grabber" aria-hidden="true"></div>
     <div class="sheet-head">
       <h2>${t('lang_title')}</h2>
@@ -181,8 +198,12 @@ function openLanguageSheet() {
           <span class="lang-tick">${l.code === getLang() ? ICONS.check : ''}</span>
         </button>`).join('')}
     </div>`);
+  if (!host) return;
 
-  document.getElementById('more-sheet').querySelectorAll('[data-lang]').forEach((btn) => {
+  // Scope to the element openSheet actually rendered into — on a wide screen
+  // that is the centred #form-panel, not the #more-sheet bottom sheet. Looking
+  // the buttons up by the sheet's id made every language unclickable on desktop.
+  host.querySelectorAll('[data-lang]').forEach((btn) => {
     btn.addEventListener('click', () => {
       setLang(btn.dataset.lang);
       closeSheet();
@@ -260,9 +281,32 @@ function initials(name) {
   return ((parts[0][0] || '') + (parts[1] ? parts[1][0] : '')).toUpperCase() || '?';
 }
 
+/** The bell lives in the app bar, left of the language selector. */
+function renderBell() {
+  const slot = document.getElementById('notif-slot');
+  if (!slot) return;
+  slot.innerHTML = currentUser ? bellButton(currentUser) : '';
+  document.getElementById('notif-bell')?.addEventListener('click', () => openInterestsSheet(currentUser));
+}
+
+// The market repaints the top bar whenever its state changes, so the bell's
+// count is never stale after accepting, deleting or responding.
+window.addEventListener('ks:refresh-chrome', () => renderAuthArea());
+
+/** Close the profile menu when the click lands anywhere outside it. */
+function closeAccountMenuOnOutside(ev) {
+  const menu = document.getElementById('account-menu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  if (ev.target.closest('#account-menu') || ev.target.closest('#btn-account')) return;
+  hideAnimated(menu, 200);
+}
+
 function renderAuthArea() {
+  renderBell();
   if (currentUser) {
-    const name = currentUser.displayName || currentUser.email || 'Farmer';
+    // One name everywhere: the farm profile's name wins (it is the one the
+    // person can edit in My Farm), then the account's own display name.
+    const name = myName() || currentUser.displayName || currentUser.email || 'Farmer';
     authArea.innerHTML = `
       <button class="avatar" id="btn-account" title="${name.replace(/"/g, '')}" aria-label="${name.replace(/"/g, '')}">
         ${initials(name)}
@@ -282,13 +326,21 @@ function renderAuthArea() {
       if (menu.classList.contains('hidden')) showAnimated(menu);
       else hideAnimated(menu, 200);
     });
-    document.addEventListener('click', () => hideAnimated(menu, 200), { once: true });
+    // Close when clicking anywhere else. This used to pass { once: true }, so
+    // the outside-click handler fired once and removed itself — after that the
+    // menu only closed by tapping the avatar again.
+    // one listener for the whole page, registered ONCE — the previous version
+    // removed itself after the first outside click, so it only worked once per
+    // page load. It looks the menu up by id each time, because the account area
+    // is re-rendered.
+    document.addEventListener('click', closeAccountMenuOnOutside);
     document.getElementById('btn-logout').addEventListener('click', async () => {
       try {
         await logout();
       } catch (e) {}
       // wipe this device — the farm is re-fetched from Firestore on next login
       clearLocalData();
+      clearMarketLocal();
     });
   } else if (isGuest()) {
     authArea.innerHTML = `
@@ -320,8 +372,17 @@ const submitBtn = document.getElementById('login-submit');
 const modalTitle = document.getElementById('modal-title');
 const modalHint = document.getElementById('modal-hint');
 let mode = 'login';
+// Which role the person is signing in AS. The market's "Login as buyer"
+// button sets this, so the modal can say so and so the role survives the
+// sign-up instead of the account defaulting to farmer.
+// The way you sign in decides the role: the Login button in the top bar is the
+// farmer's way in (the default), and the market's "Login as buyer" is the
+// buyer's. Whichever one you use is the role you get — so nobody is stuck and
+// nobody has to go into Settings to correct a mistake.
+let pendingRole = null;
 
-function openModal(preferred = 'login') {
+function openModal(preferred = 'login', role = 'farmer') {
+  pendingRole = role === 'buyer' ? 'buyer' : 'farmer';
   setMode(preferred);
   if (!firebaseReady) {
     loginError.textContent =
@@ -348,10 +409,17 @@ function setMode(next) {
   nameWrap.classList.toggle('hidden', next === 'login');
   const pw = document.getElementById('login-password');
   pw.autocomplete = next === 'login' ? 'current-password' : 'new-password';
-  modalTitle.textContent = next === 'login' ? t('hero_welcome_back') : t('auth_create');
-  submitBtn.textContent = next === 'login' ? t('common_login') : t('common_signup');
-  modalHint.textContent =
-    next === 'login'
+  const asBuyer = pendingRole === 'buyer';
+  const roleLabel = next === 'login' ? t('mk_login_buyer') : t('mk_signup_buyer');
+  modalTitle.textContent = asBuyer
+    ? roleLabel
+    : next === 'login' ? t('hero_welcome_back') : t('auth_create');
+  submitBtn.textContent = asBuyer
+    ? roleLabel
+    : next === 'login' ? t('common_login') : t('common_signup');
+  modalHint.textContent = asBuyer
+    ? t('mk_desc_buyer')
+    : next === 'login'
       ? 'Guests can explore everything — log in to save your farm and history.'
       : 'An account keeps your crops, costs and diagnoses saved privately.';
   loginError.classList.add('hidden');
@@ -359,6 +427,10 @@ function setMode(next) {
 
 tabs.login.addEventListener('click', () => setMode('login'));
 tabs.signup.addEventListener('click', () => setMode('signup'));
+
+// The market asks for the login modal in a role's name (views.js cannot import
+// this module, so the request travels as an event).
+document.addEventListener('ks:login', (e) => openModal('login', (e.detail || {}).role));
 
 const closeLogin = () => {
   document.body.classList.remove('no-scroll');
@@ -447,25 +519,57 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   });
 }
 
+/* ── Start screen (splash) ───────────────────────
+   The splash is plain markup in index.html, so it is on screen from the
+   very first paint. It is faded out here once the first screen is ready,
+   with a safety timer so a slow boot can never leave it stuck on screen. */
+const splashEl = document.getElementById('splash');
+let splashGone = false;
+function hideSplash() {
+  if (splashGone || !splashEl) return;
+  splashGone = true;
+  splashEl.classList.add('is-hidden');
+  setTimeout(() => splashEl.remove(), 700);
+}
+setTimeout(hideSplash, 2500);
+
 /* ── Boot ──────────────────────────────────────── */
 (async function boot() {
   initSheet();
   paintChrome();
   buildTabbar();
   applyLanguage();
+  initVoiceAsk(); // the home voice pop-up (listens, then hands off to Ask AI)
 
   firebaseReady = await initFirebase();
 
   if (firebaseReady) {
     onAuthChange(async (user) => {
       currentUser = user;
-      if (user) await hydrate(user); // pull the farmer's farm from Firestore
+      if (user) {
+        await hydrate(user); // pull the farmer's farm from Firestore
+        // The way in is the role you get. `pendingRole` is set by whichever
+        // login was used, and is null on a plain page load — so a returning
+        // session keeps the role it already has.
+        if (pendingRole) {
+          setRole(pendingRole);
+          pendingRole = null;
+        }
+      }
+      // The market is a PUBLIC board, so it loads whether or not anyone is
+      // signed in — a visitor must be able to see the listings.
+      await hydrateMarket(user);
+      await hydrateInterests(user); // …and who has responded to what
       renderAuthArea();
       navigate();
+      hideSplash(); // the first real screen is up — reveal it
     });
   } else {
     renderAuthArea();
+    await hydrateMarket(null); // no Firebase: still try the board, and keep the local copy
+    await hydrateInterests(null);
     navigate();
+    hideSplash();
   }
   setMode('login');
 })();

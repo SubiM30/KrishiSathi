@@ -16,7 +16,7 @@ import { saveFarmData, loadFarmData } from './auth.js';
 
 const KEY = 'ks_farm_v1';
 
-const blank = () => ({ profile: { name: '', state: '', district: '' }, crops: [], updatedAt: null });
+const blank = () => ({ profile: { name: '', state: '', district: '', role: 'farmer' }, crops: [], updatedAt: null });
 
 let farm = null;
 let cloudUser = null;
@@ -66,10 +66,25 @@ export function subscribe(fn) {
   return () => listeners.delete(fn);
 }
 
+/** The name to stamp on anything this person posts. */
+export function myName() {
+  return String((getFarm().profile || {}).name || '').trim();
+}
+
 /* ── profile ──────────────────────────────────────── */
 export function setProfile(patch) {
   getFarm().profile = { ...getFarm().profile, ...patch };
   persist();
+}
+
+/** 'farmer' or 'buyer' — one account holds one role. */
+export function getRole() {
+  return (getFarm().profile || {}).role || 'farmer';
+}
+
+/** Switch this account's role. */
+export function setRole(role) {
+  return setProfile({ role: role === 'buyer' ? 'buyer' : 'farmer' });
 }
 
 export function profileComplete() {
@@ -168,13 +183,26 @@ export async function hydrate(user) {
     const cloud = await loadFarmData();
     if (cloud && Array.isArray(cloud.crops)) {
       farm = { ...blank(), ...cloud };
+      // The name given at sign-up (or taken from Google) is this person's name.
+      // Carry it into the profile so My Farm / Settings shows it straight away
+      // instead of an empty box, and so it stays the same everywhere.
+      if (!(farm.profile && farm.profile.name) && user.displayName) {
+        farm.profile = { ...(farm.profile || {}), name: user.displayName };
+      }
       try {
         localStorage.setItem(KEY, JSON.stringify(farm));
       } catch {}
       emit();
     } else {
       // first sign-in on this device → seed the cloud with what we have
-      await saveFarmData(getFarm()).catch(() => {});
+      const local = getFarm();
+      if (!(local.profile && local.profile.name) && user.displayName) {
+        local.profile = { ...(local.profile || {}), name: user.displayName };
+        try {
+          localStorage.setItem(KEY, JSON.stringify(local));
+        } catch {}
+      }
+      await saveFarmData(local).catch(() => {});
     }
   } catch {
     /* offline — keep using the local copy */

@@ -118,3 +118,23 @@ export async function getWeather({ place, lat, lon, fresh = false }) {
   inflightWeather.set(key, pending);
   try { return { ...(await pending) }; } finally { inflightWeather.delete(key); }
 }
+
+/**
+ * Upload one optional listing photo. The browser has already shrunk it, so
+ * this is a small base64 data URL. Returns '' when storage is not configured
+ * — a listing must still be postable without a photo.
+ */
+export async function uploadMarketPhoto(image) {
+  try {
+    const res = await fetch('/api/market/image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image }),
+    });
+    if (!res.ok) return '';
+    const data = await res.json().catch(() => ({}));
+    return data.url || '';
+  } catch {
+    return '';
+  }
+}

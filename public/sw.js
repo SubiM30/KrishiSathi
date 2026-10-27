@@ -14,7 +14,7 @@
  *
  * ► Bump CACHE whenever you change any cached file.
  */
-const CACHE = 'krishisathi-v16';
+const CACHE = 'krishisathi-v19';
 
 const SHELL = [
   '/',

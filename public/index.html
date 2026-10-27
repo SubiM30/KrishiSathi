@@ -45,9 +45,34 @@
   <script defer src="https://unpkg.com/lucide@1.58.0/dist/umd/lucide.js"></script>
 
   <link rel="stylesheet" href="css/styles.css" />
+  <noscript><style>.splash{display:none!important}</style></noscript>
 </head>
 <body>
   <a class="skip-link" href="#app">Skip to content</a>
+
+  <!-- ══════════ START SCREEN (splash) ══════════
+       Shown the instant the page paints — before any script runs — and
+       faded out by js/app.js once the first screen is ready. It carries the
+       app's own identity (leaf mark · wordmark · tagline) with a short,
+       calm entrance animation, so opening KrishiSathi feels like opening an
+       app rather than waiting on a blank page. -->
+  <div class="splash" id="splash" aria-hidden="true">
+    <div class="splash-glow" aria-hidden="true"></div>
+    <div class="splash-inner">
+      <div class="splash-mark">
+        <span class="splash-ring"></span>
+        <span class="splash-ring splash-ring-2"></span>
+        <span class="splash-logo">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3"/><path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4"/><path d="M5 21h14"/></svg>
+        </span>
+      </div>
+      <div class="splash-copy">
+        <p class="splash-kicker">Farmer's Companion AI</p>
+        <h1 class="splash-name">Krishi<span class="splash-name-accent">Sathi</span></h1>
+      </div>
+      <div class="splash-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    </div>
+  </div>
 
   <div class="app-shell">
     <!-- ══════════ PRIMARY NAVIGATION ══════════
@@ -65,6 +90,7 @@
           </a>
 
           <div class="appbar-actions">
+            <span class="notif-slot" id="notif-slot"></span>
             <button class="lang-pill" id="lang-btn" type="button" title="Language" aria-label="Language">
               <span class="lang-pill-ic" id="lang-pill-ic" aria-hidden="true"></span>
               <span class="lang-current" id="lang-current">English</span>
@@ -105,6 +131,12 @@
   <div class="sheet-backdrop hidden" id="sheet-backdrop"></div>
   <section class="sheet hidden" id="more-sheet" role="dialog" aria-modal="true" aria-label="More options"></section>
 
+  <!-- Centred panel — the same overlays as the sheet, but on a wide screen a
+       floating rounded box in the middle reads far better than a bottom sheet. -->
+  <div class="modal-backdrop hidden" id="panel-backdrop">
+    <section class="modal modal-panel" id="form-panel" role="dialog" aria-modal="true"></section>
+  </div>
+
   <!-- ══════════ LOGIN / SIGN UP MODAL ══════════ -->
   <div class="modal-backdrop hidden" id="login-modal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -123,7 +155,7 @@
 
       <form id="login-form" class="stack">
         <label id="name-wrap" class="hidden"><span data-i18n="auth_name">Your name</span>
-          <input type="text" id="login-name" placeholder="e.g. Ramesh Patil" autocomplete="name" />
+          <input type="text" id="login-name" placeholder="e.g. Ramesh Kumar" autocomplete="name" />
         </label>
         <label id="email-label"><span data-i18n="auth_email">Email</span>
           <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" required />
@@ -146,6 +178,42 @@
       </button>
 
       <p class="muted small center" id="modal-hint">Guests can explore everything — log in to save history.</p>
+    </div>
+  </div>
+
+  <!-- ══════════ VOICE ASK — full-width mic pop-up ══════════
+       Opened from the home page's voice card. It listens exactly the way
+       the Ask AI mic does; the moment a question is heard it is handed to
+       Ask AI, which opens and answers. -->
+  <div class="voice-overlay hidden" id="voice-overlay" role="dialog" aria-modal="true" aria-label="Ask by voice">
+    <div class="voice-sheet">
+      <div class="voice-sheet-head">
+        <span class="voice-sheet-title">
+          <span class="voice-sheet-ic" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3"/><path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4"/><path d="M5 21h14"/></svg></span>
+          <span data-i18n="nav_chat">Ask AI</span>
+        </span>
+        <button class="icon-btn" id="voice-close" type="button" aria-label="Close"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+
+      <div class="voice-stage">
+        <div class="voice-orb" id="voice-orb">
+          <span class="voice-orb-ring" aria-hidden="true"></span>
+          <span class="voice-orb-ring d2" aria-hidden="true"></span>
+          <button class="voice-mic" id="voice-mic" type="button" aria-label="Tap the mic and speak">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
+          </button>
+        </div>
+        <p class="voice-status" id="voice-status" data-i18n="tap_mic">Tap the mic and speak</p>
+        <div class="voice-transcript">
+          <div class="voice-text" id="voice-text" contenteditable="true" role="textbox"
+               aria-multiline="true" spellcheck="false" data-placeholder="Speak your question…"></div>
+        </div>
+      </div>
+
+      <div class="voice-actions">
+        <button class="btn btn-ghost" id="voice-cancel" type="button" data-i18n="mk_cancel">Cancel</button>
+        <button class="btn btn-primary" id="voice-send" type="button"><span data-i18n="nav_chat">Ask AI</span></button>
+      </div>
     </div>
   </div>
 

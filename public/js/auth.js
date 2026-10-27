@@ -72,6 +72,22 @@ export async function loginGoogle() {
   await m.signInWithPopup(auth, provider);
 }
 
+/**
+ * Keep the account's display name in step with the farm profile.
+ * The name is one fact about one person, so wherever it is edited it should
+ * follow through to the avatar, the account menu and the greeting.
+ */
+export async function updateDisplayName(name) {
+  const clean = String(name || '').trim();
+  if (!auth || !auth.currentUser || !clean) return false;
+  try {
+    await auth._mod.updateProfile(auth.currentUser, { displayName: clean });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function logout() {
   await auth._mod.signOut(auth);
   setGuest(false);
@@ -164,6 +180,110 @@ export async function loadFarmData() {
   const snap = await fs.getDoc(fs.doc(db, 'users', user.uid));
   const data = snap.data();
   return data && data.farm ? data.farm : null;
+}
+
+/* ── Marketplace ─────────────────────────────────────────────────────
+   Listings live in their own collection. Farmers post "Want to Sell",
+   buyers post "Want to Buy"; both are readable by anyone, and only the
+   author can change or delete their own. `db._mod` is the Firestore module
+   loaded on demand, the same way the farm data is handled above.        */
+
+const POSTS = 'marketPosts';
+
+/**
+ * Firestore throws on ANY `undefined` value — `addDoc({ id: undefined })` is
+ * enough to kill the whole write. Every listing therefore goes through this,
+ * which drops the empty ones and turns anything left into a plain value.
+ */
+function clean(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined || v === null) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/** Create a listing. Returns its new id. */
+export async function createPost(post) {
+  const fs = db._mod;
+  const user = auth.currentUser;
+  if (!user) throw new Error('Log in to post.');
+  const ref = await fs.addDoc(fs.collection(db, POSTS), clean({
+    ...post,
+    id: undefined,
+    authorId: user.uid,
+    createdAt: Date.now(),
+  }));
+  return ref.id;
+}
+
+/** Update one of my listings. */
+export async function updatePost(id, patch) {
+  const fs = db._mod;
+  const user = auth.currentUser;
+  if (!user) throw new Error('Log in to edit.');
+  await fs.updateDoc(fs.doc(db, POSTS, id), clean(patch));
+  return true;
+}
+
+/** Delete one of my listings. */
+export async function deletePost(id) {
+  const fs = db._mod;
+  const user = auth.currentUser;
+  if (!user) throw new Error('Log in to delete.');
+  await fs.deleteDoc(fs.doc(db, POSTS, id));
+  return true;
+}
+
+/* ── Interests ──────────────────────────────────────────────────────
+   A response to a listing. Like the board, the collection is publicly
+   readable (the author has to be able to see who responded) but only the
+   two people involved may create or change one.                        */
+
+const INTERESTS = 'marketInterests';
+
+export async function createInterest(interest) {
+  const fs = db._mod;
+  const user = auth.currentUser;
+  if (!user) throw new Error('Log in to respond.');
+  const ref = await fs.addDoc(fs.collection(db, INTERESTS), clean({
+    ...interest, id: undefined, fromId: user.uid, createdAt: Date.now(),
+  }));
+  return ref.id;
+}
+
+export async function updateInterest(id, patch) {
+  const fs = db._mod;
+  const user = auth.currentUser;
+  if (!user) throw new Error('Log in to respond.');
+  await fs.updateDoc(fs.doc(db, INTERESTS, id), clean(patch));
+  return true;
+}
+
+export async function loadInterests(limit = 80) {
+  const fs = db._mod;
+  const q = fs.query(fs.collection(db, INTERESTS), fs.orderBy('createdAt', 'desc'), fs.limit(limit));
+  const snap = await fs.getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/** Every listing, newest first. Readable without an account. */
+export async function loadPosts(limit = 60) {
+  const fs = db._mod;
+  const q = fs.query(fs.collection(db, POSTS), fs.orderBy('createdAt', 'desc'), fs.limit(limit));
+  const snap = await fs.getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/** Just my listings. */
+export async function loadMyPosts() {
+  const fs = db._mod;
+  const user = auth.currentUser;
+  if (!user) return [];
+  const q = fs.query(fs.collection(db, POSTS), fs.where('authorId', '==', user.uid));
+  const snap = await fs.getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 /** Load recent diagnoses (newest first). */

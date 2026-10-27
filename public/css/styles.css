@@ -371,10 +371,20 @@ h3 { font-size: 1.02rem; }
 [data-theme="dark"] .tab.active { color: var(--brand-300); }
 .tab:active .tab-ic { transform: scale(0.9); }
 
-/* raised primary action in the middle of the bar */
-.tab-center { flex: 1; }
+/* raised primary action in the middle of the bar.
+   The circle carries a 4px ring (its `box-shadow` spread) to separate it from
+   the bar. That ring reaches 4px below the icon's box, which used to land on
+   top of the label and clip the tops of the tall letters — so the centre tab
+   gets a wider gap. The bar is bottom-anchored, so the label's position on
+   screen does not move; the tab simply grows into the spare height. */
+.tab-center { flex: 1; gap: 6px; }
 .tab-center .tab-ic {
-  width: 54px; height: 54px; margin-top: -20px;
+  /* -28px, not -20px: the taller icon plus the wider gap made the centre tab's
+     content 10px deeper than the others, so centring pushed its label 5px
+     below the rest. Shrinking the flow height by the same 8px puts the label
+     back on the shared baseline — and still leaves 2px between the ring and
+     the text. */
+  width: 54px; height: 54px; margin-top: -28px;
   border-radius: var(--r-full);
   background: linear-gradient(155deg, var(--brand-500), var(--brand-800));
   color: #fff;
@@ -406,7 +416,9 @@ h3 { font-size: 1.02rem; }
 .footer-brand strong { font-weight: 800; }
 .footer-brand .brand-mark { width: 34px; height: 34px; }
 .footer-brand .brand-mark .icon { width: 19px; height: 19px; }
-.footer-note { max-width: 72ch; }
+/* The note sits on its own line under the brand (a column, not beside it) and
+   spans the full footer width, so it never gets squeezed into a narrow strip. */
+.footer-note { max-width: none; text-wrap: pretty; }
 
 /* ─────────────────────────────────────────────────────────────
    5. BUTTONS
@@ -503,6 +515,260 @@ select { appearance: none; -webkit-appearance: none;
   background-repeat: no-repeat; background-position: right 0.8rem center; padding-right: 2.2rem;
 }
 
+/* ── marketplace ──────────────────────────────────────────────────────
+   The market runs on its own harvest-gold surface, hue-shifted from the
+   app's green at the same lightness. The farmer's post card is golden; the
+   buyer's is green; the two badges (Want to Sell / Want to Buy) are what
+   tell the two sides apart. */
+.page-market,
+body:has(.page-market),
+.app-body:has(.page-market) {
+  /* the surface is warm, but the hairlines stay NEUTRAL — a gold-tinted edge
+     on every card read as muddy, and worse in dark mode */
+  --bg: #f8f5f0; --bg-2: #f2ede4; --surface-2: #faf8f4; --surface-3: #f4f0e9;
+  --border: #e8e2d8; --border-2: #d9d1c3;
+}
+[data-theme="dark"] .page-market,
+[data-theme="dark"] body:has(.page-market),
+[data-theme="dark"] .app-body:has(.page-market) {
+  --bg: #141008; --bg-2: #1b160d; --surface: #1d1810;
+  --surface-2: #241e14; --surface-3: #2b2418; --border: #332c20; --border-2: #453b2b;
+}
+
+.mk-role { display: inline-flex; align-items: center; gap: 0.32rem; align-self: start; justify-self: start;
+  padding: 0.18rem 0.55rem; border-radius: var(--r-full); font-size: 0.63rem; font-weight: 800;
+  letter-spacing: 0.07em; text-transform: uppercase; }
+.mk-role .icon { width: 12px; height: 12px; }
+.mk-role-seller { background: #fdf0d0; color: #92610a; }
+.mk-role-buyer { background: #eef2ff; color: #4338ca; }
+[data-theme="dark"] .mk-role-seller { background: rgba(245,158,11,.2); color: #fcd34d; }
+[data-theme="dark"] .mk-role-buyer { background: rgba(99,102,241,.22); color: #c7d2fe; }
+
+.mk-post { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem 0.85rem; }
+.mk-post-ic { flex: none; width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; color: #fff; }
+.mk-post-ic .icon { width: 21px; height: 21px; }
+.mk-post-txt { min-width: 0; flex: 1 1 auto; }
+/* the heading is the one line that must not break — the sub-text may wrap */
+.mk-post-txt b { display: block; font-size: 0.86rem; line-height: 1.25; letter-spacing: -0.015em; }
+.mk-post-txt span { display: block; font-size: 0.75rem; line-height: 1.3; color: var(--text-2); margin-top: 0.1rem; }
+.mk-post-btn { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  gap: 0.25rem; padding: 0.5rem 0.7rem; border: 1.5px solid transparent; border-radius: var(--r-md);
+  font-weight: 800; font-size: 0.8rem; cursor: pointer; white-space: nowrap;
+  transition: filter var(--dur-1) var(--ease); }
+.mk-post-btn:hover { filter: brightness(1.04); }
+/* The login button carries a longer label than "+ Post", so it gets its own
+   tighter type scale to stay on the same row as the icon and the copy. */
+/* Signed out, the card stacks: icon + copy on the first row, and the login
+   button on a row of its own. That also gives the heading the full column
+   width, so "Want to buy something?" stays on one line. */
+.mk-post--login { flex-wrap: wrap; }
+.mk-post--login .mk-post-txt { flex: 1 1 0; }
+.mk-post--login .mk-post-btn { flex: 1 1 100%; margin-top: 0.15rem; padding: 0.6rem 1rem; font-size: 0.86rem; }
+
+/* the login label is longer than "+ Post", and it must not squeeze the
+   heading onto a second line */
+.mk-post-btn[data-role="login"] { font-size: 0.75rem; padding: 0.5rem 0.6rem; letter-spacing: -0.01em; }
+.mk-post-btn .icon { width: 15px; height: 15px; }
+/* the farmer posts in gold, the buyer in green */
+.mk-seller .mk-post { background: linear-gradient(135deg, #fff8e8, #ffeec2); border-color: #f6e2ae; }
+.mk-seller .mk-post-ic { background: linear-gradient(150deg, #fbb61f, #d97e06); color: #40260a; }
+.mk-seller .mk-post-btn { background: linear-gradient(160deg, #fbb61f, #d97e06); color: #40260a;
+  box-shadow: 0 8px 18px -10px rgba(217,126,6,.9); }
+.mk-seller .mk-post-txt span { color: #8a6a2a; }
+[data-theme="dark"] .mk-seller .mk-post { background: linear-gradient(135deg, #2a2110, #332812); border-color: #4c4129; }
+[data-theme="dark"] .mk-seller .mk-post-txt span { color: #c9ab74; }
+.mk-buyer .mk-post-ic { background: linear-gradient(150deg, #34d399, #059669); }
+.mk-buyer .mk-post-btn { background: var(--brand-600); color: #fff; }
+
+/* the market body stacks its own children: chips, then search, then the list */
+#mk-body { display: grid; gap: 0.85rem; }
+.mk-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.mk-chip { padding: 0.4rem 0.8rem; border-radius: var(--r-full); border: 1.5px solid var(--border-2);
+  background: var(--surface); color: var(--text-2); font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.mk-chip.is-on { background: var(--brand-600); border-color: var(--brand-600); color: #fff; }
+.mk-search { position: relative; }
+.mk-search .icon { position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%);
+  width: 17px; height: 17px; color: var(--text-3); }
+.mk-search input { padding-left: 2.4rem; margin-top: 0; }
+
+/* Cards fill a row instead of stretching — and the columns are decided by the
+   width AVAILABLE TO THE LIST, not by the window. The previous version used
+   viewport media queries, so on a wide screen a 560px panel was being packed
+   with three columns and looked crushed. auto-fill measures the container, so
+   the same rule is right on the page and inside a panel. */
+.mk-list { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+/* inside a grid cell a card must be free to fill its column */
+.mk-list .mk-card { width: 100%; }
+.mk-card { display: grid; gap: 0.55rem; padding: 0.85rem 0.9rem; }
+.mk-top { display: flex; align-items: center; gap: 0.5rem; }
+.mk-type { display: inline-flex; align-items: center; gap: 0.28rem; padding: 0.16rem 0.52rem;
+  border-radius: var(--r-full); font-size: 0.63rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.mk-type .icon { width: 12px; height: 12px; }
+.mk-type-sell { background: var(--brand-50); color: var(--brand-700); }
+.mk-type-buy { background: #eef2ff; color: #4338ca; }
+[data-theme="dark"] .mk-type-sell { background: rgba(20,168,106,.18); color: var(--brand-200); }
+[data-theme="dark"] .mk-type-buy { background: rgba(99,102,241,.2); color: #c7d2fe; }
+.mk-expiry { margin-left: auto; font-size: 0.7rem; color: var(--text-3); font-weight: 600; }
+.mk-expiry.is-soon { color: #b45309; }
+[data-theme="dark"] .mk-expiry.is-soon { color: #fcd34d; }
+.mk-crop { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.01em; margin: -0.1rem 0; }
+.mk-facts { display: flex; flex-wrap: wrap; gap: 0.3rem 0.85rem; font-size: 0.85rem; color: var(--text-2); }
+.mk-facts b { color: var(--text); font-weight: 700; }
+.mk-where { display: flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: var(--text-3); }
+.mk-where .icon { width: 14px; height: 14px; }
+.mk-who { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-3); }
+.mk-who .icon { width: 14px; height: 14px; }
+.mk-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+/* The row wraps rather than crushing the labels. `flex: 1 1 0` with
+   `min-width: 0` let a button shrink past its own text, and because .btn is
+   white-space: nowrap the label then spilled out of the box — visible on a
+   narrow card, when the page shows three columns but the rail is not on yet.
+   A min-width makes the row wrap to a second line instead. */
+.mk-actions .btn { flex: 1 1 auto; min-width: 5.1rem; max-width: 100%;
+  font-size: 0.79rem; padding: 0.52rem 0.35rem; gap: 0.32rem; overflow: hidden; }
+.mk-actions .btn .icon { width: 15px; height: 15px; }
+/* A listing's own actions, coloured by what they do: Extend moves it forward
+   (green), Edit and Close are neutral, Delete is the one destructive act and
+   reads red, as it does everywhere else. */
+.mk-act { font-size: 0.76rem; padding: 0.5rem 0.45rem; gap: 0.25rem; border-width: 1.5px; }
+.mk-act .icon { width: 14px; height: 14px; }
+.mk-act-edit { background: var(--surface); color: var(--text-2); border-color: var(--border-2); }
+.mk-act-edit:hover { color: var(--brand-700); border-color: var(--brand-300); }
+.mk-act-extend { background: var(--brand-50); color: var(--brand-700); border-color: var(--brand-200); }
+.mk-act-extend:hover { background: var(--brand-100); }
+.mk-act-close { background: var(--surface); color: var(--text-2); border-color: var(--border-2); }
+.mk-act-close:hover { color: var(--text); border-color: var(--border-2); background: var(--surface-2); }
+.mk-act-delete { background: var(--danger-50); color: var(--danger-600); border-color: var(--danger-100); }
+.mk-act-delete:hover { background: var(--danger-100); }
+[data-theme="dark"] .mk-act-extend { background: rgba(20,168,106,.16); color: var(--brand-200); border-color: rgba(20,168,106,.32); }
+[data-theme="dark"] .mk-act-delete { background: rgba(239,68,68,.16); color: #fca5a5; border-color: rgba(239,68,68,.32); }
+/* The buyer's section is its own world: on a PHONE there is no farmer tab bar,
+   just a way home. Scoped to phones deliberately — above 1024px the tab bar
+   becomes the left rail, and hiding it left this page with no navigation. */
+@media (max-width: 1023px) {
+  body:has(.page-market.mk-buyer) .tabbar { display: none; }
+  body:has(.page-market.mk-buyer) .site-footer { padding-bottom: var(--sp-6); }
+}
+.mk-home {
+  position: fixed; left: 0.9rem; bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-tabbar); width: 46px; height: 46px; display: grid; place-items: center;
+  border-radius: var(--r-full); background: var(--surface); color: var(--brand-700);
+  border: 1px solid var(--border-2); box-shadow: var(--shadow-md);
+  transition: transform var(--dur-1) var(--ease);
+}
+.mk-home:hover { transform: translateY(-2px); }
+.mk-home .icon { width: 21px; height: 21px; }
+[data-theme="dark"] .mk-home { color: var(--brand-300); }
+
+.mk-photo { width: 100%; height: 172px; object-fit: cover; border-radius: var(--r-md);
+  margin-bottom: 0.15rem; cursor: pointer; background: var(--surface-2); }
+/* the sheet/panel head: title on the left, close on the right */
+.mk-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.7rem; margin-bottom: 0.7rem; }
+.mk-sheet-head .sheet-title { flex: 1 1 auto; min-width: 0; }
+
+/* a textarea that can be dragged sideways drags the whole form with it */
+.mk-form textarea { resize: vertical; max-width: 100%; }
+.mk-form input, .mk-form select, .mk-form textarea { max-width: 100%; }
+
+/* the standing notice: someone has responded to one of your listings */
+.mk-notif {
+  display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left;
+  padding: 0.8rem 0.9rem; cursor: pointer; font: inherit; color: inherit;
+  border-color: var(--brand-200); background: var(--brand-50);
+}
+.mk-notif:hover { border-color: var(--brand-400); }
+[data-theme="dark"] .mk-notif { background: rgba(20,168,106,.14); border-color: rgba(20,168,106,.32); }
+.mk-notif-ic { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--brand-600); color: #fff; }
+.mk-notif-ic .icon { width: 19px; height: 19px; }
+.mk-notif-txt { flex: 1 1 auto; min-width: 0; }
+.mk-notif-txt b { display: block; font-size: 0.9rem; }
+.mk-notif-txt span { font-size: 0.78rem; color: var(--text-2); }
+.mk-notif-count { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: var(--r-full);
+  display: grid; place-items: center; background: var(--danger-500); color: #fff;
+  font-size: 0.72rem; font-weight: 800; }
+.mk-notif-arrow { flex: none; color: var(--text-3); }
+.mk-notif-arrow .icon { width: 16px; height: 16px; }
+
+.mk-photo-field { display: grid; gap: 0.55rem; }
+.mk-photo-box { position: relative; }
+.mk-photo-preview { display: block; width: 100%; max-height: 210px; object-fit: cover; border-radius: var(--r-md); }
+/* the cross sits on the picture, so removing it is obvious */
+.mk-photo-x {
+  position: absolute; top: 0.5rem; right: 0.5rem; width: 32px; height: 32px;
+  display: grid; place-items: center; border: none; cursor: pointer;
+  border-radius: var(--r-full); background: rgba(15, 25, 20, 0.6); color: #fff;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+.mk-photo-x:hover { background: var(--danger-600); }
+.mk-photo-x .icon { width: 15px; height: 15px; }
+.mk-add {
+  display: flex; align-items: center; justify-content: center; gap: 0.45rem;
+  padding: 0.7rem; border: 1.5px dashed var(--border-2); border-radius: var(--r-md);
+  background: var(--surface-2); color: var(--text-2);
+  font-size: 0.84rem; font-weight: 600; cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.mk-add:hover { border-color: var(--brand-400); color: var(--brand-700); }
+.mk-add .icon { width: 17px; height: 17px; }
+.mk-rows { display: grid; gap: 0.1rem; }
+.mk-row { display: flex; justify-content: space-between; gap: 0.8rem; padding: 0.55rem 0.7rem;
+  background: var(--surface-2); border-radius: var(--r-sm); font-size: 0.86rem; }
+.mk-row em { font-style: normal; color: var(--text-3); }
+.mk-row b { font-weight: 700; text-align: right; }
+.mk-img { height: 150px; border-radius: var(--r-md); object-fit: cover; width: 100%; }
+.mk-img-ph { height: 150px; border-radius: var(--r-md); background: linear-gradient(150deg, #86efac, #16a34a);
+  display: grid; place-items: center; color: #fff; }
+.mk-img-ph .icon { width: 34px; height: 34px; }
+.mk-empty { text-align: center; padding: 1.8rem 1rem; color: var(--text-3); font-size: 0.88rem; }
+.mk-form { display: grid; gap: 0.7rem; }
+.mk-two { display: grid; grid-template-columns: 1fr 0.8fr; gap: 0.5rem; }
+.mk-submit { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  width: 100%; padding: 0.72rem 1rem; border: 1.5px solid transparent; border-radius: var(--r-md);
+  font-weight: 800; font-size: 0.9rem; cursor: pointer;
+  background: var(--brand-600); color: #fff;
+  box-shadow: 0 10px 22px -14px rgba(13, 145, 89, 0.85);
+  transition: filter var(--dur-1) var(--ease); }
+.mk-submit:hover { filter: brightness(1.05); }
+.mk-submit .icon { width: 16px; height: 16px; }
+.mk-add { display: flex; align-items: center; gap: 0.45rem; padding: 0.7rem; border: 1.5px dashed var(--border-2);
+  border-radius: var(--r-md); color: var(--text-3); font-size: 0.84rem; justify-content: center; cursor: pointer; }
+.mk-add .icon { width: 17px; height: 17px; }
+.mk-add img { max-height: 120px; border-radius: var(--r-sm); }
+.mk-note { font-size: 0.74rem; color: var(--text-3); }
+
+/* ── searchable combobox (the crop picker) ──
+   The text input reuses the global input styling, so it matches every other
+   field; only the suggestion list is new. */
+.combo { position: relative; }
+.combo-input {
+  padding-right: 2.2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a9c91' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.8rem center;
+}
+.combo-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40;
+  max-height: 264px; overflow-y: auto; padding: 0.3rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-md);
+  animation: popIn 0.14s var(--ease-out) backwards;
+}
+.combo-item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem;
+  width: 100%; text-align: left; padding: 0.5rem 0.6rem; border: none; background: none;
+  border-radius: var(--r-sm); color: var(--text); font-size: 0.9rem; font-weight: 500;
+  cursor: pointer; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.combo-item:hover, .combo-item.is-active { background: var(--brand-50); color: var(--brand-800); }
+[data-theme="dark"] .combo-item:hover,
+[data-theme="dark"] .combo-item.is-active { background: rgba(20,168,106,.16); color: var(--brand-100); }
+.combo-name { min-width: 0; overflow-wrap: anywhere; }
+.combo-group { flex: none; font-size: 0.68rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.combo-empty, .combo-more { padding: 0.6rem; color: var(--text-3); font-size: 0.82rem; text-align: center; }
+.combo-more { border-top: 1px solid var(--border); }
+
 .stack { display: grid; gap: var(--sp-4); }
 .form-row { display: grid; gap: var(--sp-4); }
 @media (min-width: 700px) { .form-row { grid-template-columns: 1fr 1fr; } }
@@ -596,17 +862,30 @@ tbody tr:hover td { background: var(--surface-2); }
 /* ─────────────────────────────────────────────────────────────
    11. TOAST · MODAL · SHEET
    ───────────────────────────────────────────────────────────── */
+/* A toast is a small, quiet confirmation — not a black bar across the screen.
+   It hugs its text, sits on the app's own surface, and carries a tick. */
 .toast {
-  position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + 1rem);
+  position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + 1.1rem);
   transform: translateX(-50%); z-index: var(--z-toast);
-  width: min(560px, calc(100vw - 2rem));
-  background: var(--brand-950); color: #fff;
-  padding: 0.85rem 1.15rem; border-radius: var(--r-lg);
-  font-weight: 600; font-size: 0.92rem; line-height: 1.45; text-align: center;
-  box-shadow: var(--shadow-lg); border: 1px solid rgba(255, 255, 255, 0.08);
-  animation: toastIn 0.35s var(--ease-spring) both;
+  display: flex; align-items: center; gap: 0.6rem;
+  width: max-content; max-width: min(400px, calc(100vw - 2rem));
+  padding: 0.6rem 1rem 0.6rem 0.6rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-2); border-radius: var(--r-full);
+  font-weight: 600; font-size: 0.87rem; line-height: 1.35; text-align: left;
+  box-shadow: var(--shadow-md);
+  animation: toastIn 0.32s var(--ease-spring) both;
 }
-[data-theme="dark"] .toast { background: #1c2a21; }
+.toast-ic { flex: none; width: 26px; height: 26px; border-radius: var(--r-full);
+  display: grid; place-items: center; background: var(--brand-50); color: var(--brand-700); }
+.toast-ic .icon { width: 15px; height: 15px; }
+.toast-text { min-width: 0; }
+[data-theme="dark"] .toast { background: var(--surface-2); }
+[data-theme="dark"] .toast-ic { background: rgba(20,168,106,.18); color: var(--brand-200); }
+/* where the bar is hidden, the toast sits lower */
+@media (max-width: 1023px) {
+  body:has(.page-market.mk-buyer) .toast { bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px)); }
+}
 
 .modal-backdrop {
   position: fixed; inset: 0; z-index: var(--z-modal);
@@ -623,6 +902,8 @@ tbody tr:hover td { background: var(--surface-2); }
   box-shadow: var(--shadow-lg);
   animation: popIn 0.28s var(--ease-out) backwards;
 }
+/* the form panel is wider than the login modal */
+.modal-panel { width: min(600px, 100%); padding: 1.5rem 1.6rem 1.7rem; }
 .modal-close {
   position: absolute; top: 0.7rem; right: 0.7rem;
   width: 34px; height: 34px; display: grid; place-items: center;
@@ -855,6 +1136,7 @@ a.glance-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md);
   .app-tile .icon { width: clamp(26px, 5.7cqw, 32px); height: clamp(26px, 5.7cqw, 32px); }
 }
 /* one gradient per feature — chosen to mean something, not just to differ */
+.app-tile-market  { background: linear-gradient(145deg, #fde047, #ca8a04); }
 .app-tile-doctor  { background: linear-gradient(145deg, #34d399, #059669); }
 .app-tile-ai      { background: linear-gradient(145deg, #a78bfa, #6d28d9); }
 .app-tile-weather { background: linear-gradient(145deg, #38bdf8, #0284c7); }
@@ -1762,4 +2044,367 @@ a.glance-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md);
 @container (max-width: 500px) {
   .cycle-stage .st-long { display: none; }
   .cycle-stage .st-short { display: inline; }
+}
+
+/* ══ v24.6 fixes ══════════════════════════════════════════════════ */
+/* the bell in the top bar — its own slot, so it never pushes the profile */
+.notif-slot { display: contents; }
+.notif-bell { position: relative; }
+.notif-dot { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: var(--r-full);
+  background: var(--danger-500); color: #fff; font-size: 0.66rem; font-weight: 800;
+  border: 2px solid var(--surface); }
+/* already responded: no highlight, and it reads as done rather than as an action */
+.act-sent { background: var(--surface-2); color: var(--text-3); border-color: var(--border); cursor: default; }
+.act-sent:hover { background: var(--surface-2); color: var(--text-3); }
+.resp-section { font-size: 0.76rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-3); margin: 0.9rem 0 0.5rem; }
+.resp-section:first-of-type { margin-top: 0.2rem; }
+
+/* ══ v24.8 ════════════════════════════════════════════════════════ */
+/* a little breathing room inside the new sheets — the same gap the language
+   picker has, so content never touches the panel edge */
+.sheet-roomy { padding-inline: 0.55rem; }
+.resp-wrap { padding: 0.15rem 0.55rem 0.5rem; }
+/* the market form and the responses list sit inside the sheet, so give their
+   content the same small gap the language picker has */
+.mk-form, .resp-wrap { padding-inline: 0.55rem; }
+.mk-sheet-head { padding-inline: 0.55rem; }
+
+/* the bell's number, properly centred in its circle */
+.notif-dot { box-sizing: border-box; line-height: 1; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; font-size: 0.64rem; }
+
+/* the whole listing card is the tap target */
+.mk-card-tap { cursor: pointer; }
+.mk-card-tap:active { transform: scale(0.995); }
+
+/* the two sections of the notification sheet must not look alike:
+   IN  = a person who responded to me  (green edge, name as the headline)
+   OUT = a listing I responded to      (gold edge, the crop as the headline) */
+.resp-card { border-left-width: 4px; border-left-style: solid; }
+.resp-in  { border-left-color: var(--brand-500); }
+.resp-out { border-left-color: var(--accent-500); }
+[data-theme="dark"] .resp-in  { border-left-color: var(--brand-600); }
+[data-theme="dark"] .resp-out { border-left-color: var(--accent-600); }
+.resp-section-in, .resp-section-out { display: flex; align-items: center; gap: 0.4rem; }
+.resp-section-in b, .resp-section-out b {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--r-full);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.68rem; letter-spacing: 0; }
+.resp-section-in b { background: var(--brand-50); color: var(--brand-700); }
+.resp-section-out b { background: var(--accent-50); color: var(--accent-700); }
+[data-theme="dark"] .resp-section-in b { background: rgba(20,168,106,.18); color: var(--brand-200); }
+[data-theme="dark"] .resp-section-out b { background: rgba(245,158,11,.18); color: var(--accent-300); }
+.resp-out .mk-actions { margin-top: 0.15rem; }
+.resp-out .mk-actions .btn { pointer-events: none; }
+
+/* ══ v24.9 ════════════════════════════════════════════════════════ */
+/* the page header with its own action, top right — not in the navigation */
+.mk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.7rem; }
+.mk-head-copy { min-width: 0; }
+.mk-myreq { flex: none; white-space: nowrap; }
+.mk-myreq b { min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-full);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--brand-600); color: #fff; font-size: 0.68rem; }
+/* the cross that removes a single notification */
+.resp-x { position: absolute; top: 0.5rem; right: 0.5rem; width: 26px; height: 26px;
+  display: grid; place-items: center; border: 1px solid var(--border-2); border-radius: var(--r-full);
+  background: var(--surface); color: var(--text-3); cursor: pointer; }
+.resp-x:hover { color: var(--danger-600); border-color: var(--danger-100); }
+.resp-x .icon { width: 13px; height: 13px; }
+.resp-card { position: relative; }
+.resp-card .mk-top { padding-right: 30px; }
+#resp-clear { flex: none; white-space: nowrap; }
+
+/* ══ v24.10 ═══════════════════════════════════════════════════════ */
+/* the role badge and the page's own buttons share one row, so the heading and
+   the description keep the full width */
+.mk-toprow { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.mk-toprow .mk-role { margin: 0; }
+.mk-toprow-actions { display: flex; align-items: center; gap: 0.45rem; flex: none; }
+.mk-histbtn { width: 34px; height: 34px; }
+.mk-histbtn .icon { width: 17px; height: 17px; }
+/* a rejected response reads as a decision, not a warning */
+.mk-expiry.is-no { background: var(--danger-50); color: var(--danger-600); }
+[data-theme="dark"] .mk-expiry.is-no { background: rgba(239,68,68,.16); color: #fca5a5; }
+.resp-x-reject:hover { color: var(--danger-600); border-color: var(--danger-100); background: var(--danger-50); }
+.mk-countdown { color: var(--text-3); font-weight: 600; }
+.mk-facts .icon { width: 13px; height: 13px; vertical-align: -2px; margin-right: 2px; }
+
+/* ══ v24.11 ═══════════════════════════════════════════════════════ */
+/* the heading and its button share a row; the description keeps the full width */
+.mk-headrow { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; }
+.mk-headrow h1 { margin: 0; min-width: 0; }
+/* the right side of a card's top row: the date, then how long is left */
+.mk-topright { display: flex; align-items: center; gap: 0.45rem; flex: none; }
+/* the posting date, as a badge — the way a feed shows it */
+.mk-date { display: inline-flex; align-items: center; padding: 0.2rem 0.5rem; border-radius: var(--r-full);
+  background: var(--brand-50); color: var(--brand-700); font-size: 0.68rem; font-weight: 700; white-space: nowrap; }
+[data-theme="dark"] .mk-date { background: rgba(20,168,106,.18); color: var(--brand-200); }
+.mk-top { gap: 0.4rem; flex-wrap: wrap; }
+
+/* ══ v24.12 ═══════════════════════════════════════════════════════ */
+/* the floating home button is only needed where the rail is hidden — this has
+   to come after .mk-home's own rule, or that rule wins */
+@media (min-width: 1024px) {
+  .mk-home { display: none; }
+}
+
+/* ══ v24.13 ═══════════════════════════════════════════════════════ */
+/* The notification / history panels hold a grid of cards, so on a wide screen
+   they get more room to hold them — the panel widens, the list then fits two
+   or three columns inside it on its own. On a phone nothing changes. */
+@media (min-width: 768px) {
+  .sheet:has(.sheet-wide) { max-width: min(940px, calc(100vw - 3rem)); }
+}
+/* Above 1024px openSheet renders into #form-panel instead of the bottom sheet,
+   so that is the one that has to widen there. */
+@media (min-width: 1024px) {
+  .modal-panel:has(.sheet-wide) { width: min(1000px, calc(100vw - 3rem)); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   v24.15 — start screen · crop-stage colours · voice ask
+   Three additions, each built from the existing tokens so they follow
+   the theme (light/dark) and the brand with no new palette to learn.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────
+   1. START SCREEN (splash)
+   ───────────────────────────────────────────────────────────── */
+.splash {
+  position: fixed; inset: 0; z-index: 600;
+  display: grid; place-items: center; overflow: hidden;
+  background: var(--bg);
+  transition: opacity 0.55s var(--ease-out), visibility 0.55s;
+}
+.splash.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* a soft green wash behind the mark — reads the same in light and dark */
+.splash-glow {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(46% 34% at 50% 42%, rgba(20, 168, 106, 0.20), transparent 70%),
+    radial-gradient(60% 42% at 80% 90%, rgba(245, 158, 11, 0.12), transparent 72%);
+  animation: splashGlow 0.9s var(--ease) both;
+}
+.splash-inner {
+  position: relative; display: grid; justify-items: center; gap: 1.15rem;
+  padding: 2rem; text-align: center;
+}
+.splash-mark { position: relative; display: grid; place-items: center; width: 108px; height: 108px; }
+.splash-logo {
+  position: relative; z-index: 2;
+  display: grid; place-items: center; width: 84px; height: 84px; border-radius: 26px;
+  color: #fff;
+  background: linear-gradient(150deg, var(--brand-400), var(--brand-700));
+  box-shadow: 0 18px 40px -14px rgba(11, 118, 72, 0.7);
+  animation: splashPop 0.7s var(--ease-spring) both, splashFloat 3.6s 0.7s var(--ease) infinite;
+}
+.splash-logo .icon { width: 42px; height: 42px; }
+.splash-ring {
+  position: absolute; inset: 0; border-radius: 34px;
+  border: 2px solid var(--brand-400); opacity: 0;
+  animation: splashRing 2.6s 0.5s var(--ease-out) infinite;
+}
+.splash-ring-2 { animation-delay: 1.6s; }
+
+.splash-copy { display: grid; gap: 0.18rem; }
+.splash-kicker {
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--brand-600);
+  animation: splashRise 0.6s 0.28s var(--ease-out) both;
+}
+.splash-name {
+  font-size: clamp(1.7rem, 7vw, 2.15rem); font-weight: 800; letter-spacing: -0.03em;
+  color: var(--text);
+  animation: splashRise 0.6s 0.4s var(--ease-out) both;
+}
+.splash-name-accent { color: var(--brand-500); }
+.splash-dots { display: flex; gap: 0.4rem; animation: splashRise 0.6s 0.55s var(--ease-out) both; }
+.splash-dots span {
+  width: 7px; height: 7px; border-radius: 99px; background: var(--brand-400);
+  animation: splashDot 1.1s var(--ease) infinite;
+}
+.splash-dots span:nth-child(2) { animation-delay: 0.16s; }
+.splash-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes splashPop { from { opacity: 0; transform: scale(0.72); } to { opacity: 1; transform: scale(1); } }
+@keyframes splashFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes splashRing { 0% { opacity: 0.5; transform: scale(0.85); } 70% { opacity: 0; } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes splashRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes splashDot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-5px); } }
+@keyframes splashGlow { from { opacity: 0; } to { opacity: 1; } }
+
+/* ─────────────────────────────────────────────────────────────
+   2. CROP-CYCLE STAGE COLOURS
+   Each phase of a crop's life carries its own soft colour — sowing in
+   earth, growth in leaf-green, flowering in blossom, ripening in gold,
+   harvest in amber. Soft tints (never loud) keep the calm feel of the
+   rest of the UI. Home and My Farm render the same cycle, so both follow.
+   ───────────────────────────────────────────────────────────── */
+.cycle, .cycle-stage, .stage-badge {
+  --st: var(--brand-500);
+  --st-soft: var(--brand-50);
+  --st-ink: var(--brand-800);
+}
+[data-stage="0"] { --st: #b07a45; --st-soft: #f4e8db; --st-ink: #7c5327; }
+[data-stage="1"] { --st: #14a86a; --st-soft: #d7f4e4; --st-ink: #0a5e3b; }
+[data-stage="2"] { --st: #d9739f; --st-soft: #fbe3ee; --st-ink: #9c3f66; }
+[data-stage="3"] { --st: #e0a32a; --st-soft: #fdefcf; --st-ink: #8a5e07; }
+[data-stage="4"] { --st: #dd7a1c; --st-soft: #fce7d3; --st-ink: #8f4a0c; }
+[data-theme="dark"] [data-stage="0"] { --st: #d6a97b; --st-soft: rgba(214, 169, 123, 0.16); --st-ink: #e7c69f; }
+[data-theme="dark"] [data-stage="1"] { --st: #3ecb8b; --st-soft: rgba(20, 168, 106, 0.18); --st-ink: #8ce9b6; }
+[data-theme="dark"] [data-stage="2"] { --st: #eb9ec0; --st-soft: rgba(217, 115, 159, 0.18); --st-ink: #f3bcd4; }
+[data-theme="dark"] [data-stage="3"] { --st: #f0bc4e; --st-soft: rgba(224, 163, 42, 0.18); --st-ink: #f7d488; }
+[data-theme="dark"] [data-stage="4"] { --st: #ee9a45; --st-soft: rgba(221, 122, 28, 0.18); --st-ink: #f6bd82; }
+
+/* the progress bar fills in the current stage's colour */
+.cycle-bar span { background: linear-gradient(90deg, var(--brand-400), var(--st)); }
+/* a reached stage shows its own colour; a stage still ahead stays neutral */
+.cycle-stage.done { color: var(--st-ink); }
+.cycle-stage.done i { background: var(--st-soft); color: var(--st); }
+.cycle-stage.active { color: var(--st-ink); }
+.cycle-stage.active i { background: var(--st); color: #fff; box-shadow: 0 0 0 4px var(--st-soft); }
+[data-theme="dark"] .cycle-stage.active { color: var(--st-ink); }
+.stage-badge { background: var(--st-soft); color: var(--st-ink); }
+[data-theme="dark"] .stage-badge { background: var(--st-soft); color: var(--st-ink); }
+
+/* ─────────────────────────────────────────────────────────────
+   3. VOICE ASK — home card + full-width mic pop-up
+   ───────────────────────────────────────────────────────────── */
+
+/* the home card: a prominent, tappable invitation to talk to the app */
+.voice-hero {
+  position: relative; overflow: hidden; isolation: isolate;
+  border-radius: var(--r-xl); border: 1px solid rgba(255, 255, 255, 0.10);
+  background:
+    radial-gradient(120% 130% at 88% 10%, rgba(245, 158, 11, 0.30), transparent 48%),
+    linear-gradient(140deg, var(--brand-800), var(--brand-950));
+  box-shadow: var(--shadow-md);
+}
+.voice-hero::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0.4;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px);
+  background-size: 20px 20px;
+  mask-image: linear-gradient(180deg, #000, transparent 78%);
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 78%);
+}
+.voice-hero-btn {
+  display: flex; align-items: center; gap: 1rem; width: 100%;
+  padding: clamp(1rem, 3vw, 1.35rem); text-align: left;
+  background: none; border: 0; color: #fff; cursor: pointer; font: inherit;
+}
+.voice-hero-orb {
+  position: relative; flex: none; width: 62px; height: 62px; border-radius: 999px;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(150deg, var(--brand-300), var(--brand-600));
+  box-shadow: 0 12px 26px -10px rgba(11, 118, 72, 0.85);
+  transition: transform var(--dur-2) var(--ease-spring);
+}
+.voice-hero-orb .icon { width: 28px; height: 28px; position: relative; z-index: 1; }
+.voice-hero-orb::before {
+  content: ""; position: absolute; inset: 0; border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  animation: voiceInvite 2.4s var(--ease-out) infinite;
+}
+.voice-hero-copy { display: grid; gap: 0.1rem; min-width: 0; flex: 1; }
+.voice-hero-kicker {
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--accent-300);
+}
+.voice-hero-copy strong { font-size: 1.12rem; font-weight: 800; letter-spacing: -0.02em; }
+.voice-hero-sub { font-size: 0.86rem; color: rgba(255, 255, 255, 0.82); }
+.voice-hero-go {
+  flex: none; display: grid; place-items: center; width: 38px; height: 38px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.14); color: #fff;
+  transition: transform var(--dur-2) var(--ease);
+}
+.voice-hero-btn:hover .voice-hero-go { transform: translateX(3px); }
+.voice-hero-btn:hover .voice-hero-orb { transform: scale(1.04); }
+@keyframes voiceInvite { 0% { opacity: 0.6; transform: scale(0.9); } 70% { opacity: 0; } 100% { opacity: 0; transform: scale(1.5); } }
+
+/* the pop-up — full width on a phone, a centred card on a wide screen */
+.voice-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  animation: fadeIn 0.25s var(--ease) both;
+}
+.voice-overlay.is-closing { animation: fadeOut 0.25s var(--ease) both; }
+.voice-sheet {
+  width: 100%; max-width: 560px;
+  background: var(--surface); color: var(--text);
+  border-radius: var(--r-2xl) var(--r-2xl) 0 0;
+  padding: 1.1rem clamp(1rem, 4vw, 1.6rem) calc(1.4rem + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 1.1rem; box-shadow: var(--shadow-lg);
+  animation: sheetUp 0.4s var(--ease-out) both;
+}
+.voice-overlay.is-closing .voice-sheet { animation: sheetDown 0.3s var(--ease) both; }
+@media (min-width: 1024px) {
+  .voice-overlay { align-items: center; }
+  .voice-sheet { border-radius: var(--r-2xl); max-width: 470px; animation: popIn 0.3s var(--ease-spring) both; }
+  .voice-overlay.is-closing .voice-sheet { animation: popOut 0.25s var(--ease) both; }
+}
+.voice-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.voice-sheet-title { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.02rem; }
+.voice-sheet-ic {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
+  background: var(--brand-50); color: var(--brand-700);
+}
+.voice-sheet-ic .icon { width: 17px; height: 17px; }
+
+.voice-stage { display: grid; justify-items: center; gap: 1rem; padding: 0.4rem 0 0.2rem; }
+.voice-orb { position: relative; display: grid; place-items: center; width: 132px; height: 132px; }
+.voice-mic {
+  position: relative; z-index: 2; width: 92px; height: 92px; border-radius: 999px;
+  display: grid; place-items: center; border: 0; cursor: pointer; color: #fff;
+  background: linear-gradient(150deg, var(--brand-400), var(--brand-700));
+  box-shadow: 0 16px 36px -14px rgba(11, 118, 72, 0.8);
+  transition: transform var(--dur-2) var(--ease-spring), box-shadow var(--dur-2) var(--ease);
+}
+.voice-mic .icon { width: 40px; height: 40px; }
+.voice-mic:hover { transform: scale(1.05); }
+.voice-mic:active { transform: scale(0.96); }
+.voice-mic.listening {
+  background: linear-gradient(150deg, #f87171, #dc2626);
+  animation: pulseRing 1.6s infinite;
+}
+.voice-orb-ring { position: absolute; inset: 0; border-radius: 999px; border: 2px solid var(--brand-400); opacity: 0; }
+.voice-overlay.is-listening .voice-orb-ring { animation: splashRing 2.2s var(--ease-out) infinite; }
+.voice-overlay.is-listening .voice-orb-ring.d2 { animation-delay: 1.1s; }
+.voice-status { font-weight: 700; color: var(--text); text-align: center; }
+/* The answer box doubles as the editable transcript: whatever was heard can be
+   corrected here before it is sent. `display:grid; place-items:center` keeps the
+   placeholder (and a short question) exactly centred, both ways. */
+.voice-transcript {
+  width: 100%; min-height: 96px; max-height: 34vh; overflow-y: auto;
+  padding: 0.9rem 1rem; border-radius: var(--r-lg);
+  background: var(--surface-2); border: 1px solid var(--border);
+  display: grid; place-items: center;
+  transition: border-color var(--dur-2) var(--ease);
+}
+.voice-text {
+  width: 100%; text-align: center; outline: none;
+  font-size: 1.05rem; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere; caret-color: var(--brand-600);
+}
+.voice-text:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-3);
+  pointer-events: none;
+}
+.voice-overlay.is-listening .voice-transcript { border-color: var(--brand-300); }
+.voice-actions { display: flex; gap: 0.6rem; }
+.voice-actions .btn { flex: 1 1 0; min-width: 0; }
+.voice-actions .btn:disabled { cursor: not-allowed; }
+
+/* respect a reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .splash-logo, .splash-ring, .splash-kicker, .splash-name, .splash-dots span, .splash-glow,
+  .voice-hero-orb::before, .voice-orb-ring, .voice-mic.listening { animation: none !important; }
+  .splash-ring { opacity: 0; }
 }
